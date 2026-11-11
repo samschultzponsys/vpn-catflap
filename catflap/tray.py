@@ -28,7 +28,7 @@ from . import autostart, checks, update
 from .core import Manager
 from .drivers import DRIVERS
 from .model import Profile
-from .ui_common import (GREY, QtCore, QtGui, QtWidgets, dot_icon, friendly_error, make_icon,
+from .ui_common import (GREY, app_icon, QtCore, QtGui, QtWidgets, dot_icon, friendly_error, make_icon,
                         make_pixmap, require_qt, run_bg, run_blocking, status_text)
 from .version import __version__
 
@@ -69,7 +69,7 @@ class MainWindow(QtWidgets.QMainWindow if QtWidgets else object):
         from .ui_views import AdvancedView, BasicView
         self.app = app
         self.setWindowTitle("catflap")
-        self.setWindowIcon(QtGui.QIcon(make_pixmap(["#22C55E"], size=128)))
+        self.setWindowIcon(app_icon())
         self.resize(820, 560)
         self.stack = QtWidgets.QStackedWidget()
         self.basic = BasicView()
@@ -583,7 +583,7 @@ def main(argv: list[str] | None = None) -> int:
     QtWidgets.QApplication.setDesktopFileName(os.environ.get("FLATPAK_ID", "catflap"))
     qapp = QtWidgets.QApplication.instance() or QtWidgets.QApplication([sys.argv[0]])
     qapp.setQuitOnLastWindowClosed(False)
-    qapp.setWindowIcon(QtGui.QIcon(make_pixmap(["#22C55E"], size=128)))
+    qapp.setWindowIcon(app_icon())
     if not QtWidgets.QSystemTrayIcon.isSystemTrayAvailable():
         print("catflap: no system tray available; showing the window only", file=sys.stderr)
     app = TrayApp(qapp)

@@ -23,7 +23,7 @@ from .core import Manager
 from .drivers import get_driver_class
 from .drivers.base import GatewayConfig
 from .http import fetch_fingerprint
-from .ui_common import (PALETTE, QtCore, QtGui, QtWidgets, Qt, friendly_error, make_pixmap,
+from .ui_common import (app_icon, PALETTE, QtCore, QtGui, QtWidgets, Qt, friendly_error, make_pixmap,
                         run_bg, run_blocking)
 
 _Wizard = QtWidgets.QWizard if QtWidgets else object
@@ -110,7 +110,7 @@ class FirstRunWizard(_Wizard):
         from .ui_views import AdvancedView, BasicView, render_preview
         self.setWindowTitle("Welcome to catflap")
         self.setWizardStyle(QtWidgets.QWizard.ModernStyle)
-        self.setPixmap(QtWidgets.QWizard.LogoPixmap, make_pixmap(["#22C55E"], size=56))
+        self.setPixmap(QtWidgets.QWizard.LogoPixmap, app_icon().pixmap(56, 56))
         self.resize(820, 600)
 
         welcome = QtWidgets.QWizardPage()
@@ -699,7 +699,7 @@ class SiteWizard(_Wizard, _GatewayMixin):
         self.connect_after = False
         self.setWindowTitle("Add a site")
         self.setWizardStyle(QtWidgets.QWizard.ModernStyle)
-        self.setPixmap(QtWidgets.QWizard.LogoPixmap, make_pixmap(["#22C55E"], size=56))
+        self.setPixmap(QtWidgets.QWizard.LogoPixmap, app_icon().pixmap(56, 56))
         self.setOption(QtWidgets.QWizard.NoBackButtonOnLastPage, True)
         self.resize(720, 560)
         self.pages = {
@@ -722,7 +722,7 @@ class GatewayWizard(_Wizard, _GatewayMixin):
         self.sites: list = []
         self.setWindowTitle("Add a gateway")
         self.setWizardStyle(QtWidgets.QWizard.ModernStyle)
-        self.setPixmap(QtWidgets.QWizard.LogoPixmap, make_pixmap(["#22C55E"], size=56))
+        self.setPixmap(QtWidgets.QWizard.LogoPixmap, app_icon().pixmap(56, 56))
         intro = QtWidgets.QWizardPage()
         intro.setTitle("Add a gateway")
         il = QtWidgets.QVBoxLayout(intro)

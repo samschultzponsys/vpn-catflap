@@ -9,7 +9,7 @@ itself into the new version; inside the Flatpak this uses the portal's
 from __future__ import annotations
 
 from . import update
-from .ui_common import QtCore, QtGui, QtWidgets, Qt, friendly_error, make_pixmap, run_blocking
+from .ui_common import app_icon, QtCore, QtGui, QtWidgets, Qt, friendly_error, make_pixmap, run_blocking
 from .version import __version__
 
 _Dialog = QtWidgets.QDialog if QtWidgets else object
@@ -32,7 +32,7 @@ class UpdateDialog(_Dialog):
 
         head = QtWidgets.QHBoxLayout()
         pic = QtWidgets.QLabel()
-        pic.setPixmap(make_pixmap(["#3B82F6"], size=56))
+        pic.setPixmap(app_icon().pixmap(56, 56))
         head.addWidget(pic)
         title = QtWidgets.QLabel(
             f"<h2 style='margin:0'>catflap {rel.version} is available</h2>"

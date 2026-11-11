@@ -26,23 +26,39 @@ def require_qt() -> None:
 
 
 # ============================================================ icons
+# The tray icon follows the app icon (packaging/catflap.svg): the first icon's
+# cat sitting in a tunnel arch. Coordinates are in a 64x64 box.
+_CAT = [(19, 56), (19, 41.5), ("q", 19, 37.5, 21, 35.5), (22, 29), (28, 34),
+        ("q", 32, 32.75, 36, 34), (42, 29), (43, 35.5), ("q", 45, 37.5, 45, 41.5), (45, 56)]
+
+
 def _cat_path(s: float) -> "QtGui.QPainterPath":
-    """Cat head (same shape as the app icon), in 64x64 units scaled by ``s``."""
-    pts = [(19, 54), (19, 37), (21, 31), (22, 22), (28, 28), (32, 27), (36, 28), (42, 22),
-           (43, 31), (45, 37), (45, 54)]
     path = QtGui.QPainterPath()
-    path.moveTo(pts[0][0] * s, pts[0][1] * s)
-    for x, y in pts[1:]:
-        path.lineTo(x * s, y * s)
+    path.moveTo(_CAT[0][0] * s, _CAT[0][1] * s)
+    for pt in _CAT[1:]:
+        if pt[0] == "q":
+            path.quadTo(pt[1] * s, pt[2] * s, pt[3] * s, pt[4] * s)
+        else:
+            path.lineTo(pt[0] * s, pt[1] * s)
     path.closeSubpath()
     return path
 
 
-def make_pixmap(colors: list[str], error: bool = False, size: int = 64) -> "QtGui.QPixmap":
-    """The cat in its cat flap.
+def _arch_path(s: float) -> "QtGui.QPainterPath":
+    """Tunnel arch: up the left side, half circle over the top, down the right."""
+    path = QtGui.QPainterPath()
+    path.moveTo(11 * s, 58 * s)
+    path.lineTo(11 * s, 31 * s)
+    path.arcTo(QtCore.QRectF(11 * s, 10 * s, 42 * s, 42 * s), 180, -180)
+    path.lineTo(53 * s, 58 * s)
+    return path
 
-    Disconnected: grey frame, cat drawn as an outline only. Connected: cat and
-    frame in the connection colour (cat striped when several sites are up).
+
+def make_pixmap(colors: list[str], error: bool = False, size: int = 64) -> "QtGui.QPixmap":
+    """The tray icon: the cat in its tunnel.
+
+    Disconnected: grey arch, cat drawn as an outline only. Connected: arch and
+    cat in the connection colour (cat striped when several sites are up).
     Error: red badge in the corner.
     """
     pm = QtGui.QPixmap(size, size)
@@ -50,15 +66,12 @@ def make_pixmap(colors: list[str], error: bool = False, size: int = 64) -> "QtGu
     p = QtGui.QPainter(pm)
     p.setRenderHint(QtGui.QPainter.Antialiasing)
     s = size / 64.0
-    door = QtCore.QRectF(8 * s, 9 * s, 48 * s, 47 * s)
-    # Frame in the connection colour so it reads on light and dark panels.
-    frame = QtGui.QColor(GREY if not colors else colors[0] if len(colors) == 1 else "#64748B")
-    clip = QtGui.QPainterPath()
-    clip.addRoundedRect(door, 10 * s, 10 * s)
+    # Arch in the connection colour so it reads on light and dark panels.
+    arch = QtGui.QColor(GREY if not colors else colors[0] if len(colors) == 1 else "#64748B")
     cat = _cat_path(s)
     if colors:
         p.save()
-        p.setClipPath(clip.intersected(cat))
+        p.setClipPath(cat)
         bounds = cat.boundingRect()
         n = len(colors)
         for i, c in enumerate(colors):
@@ -68,26 +81,31 @@ def make_pixmap(colors: list[str], error: bool = False, size: int = 64) -> "QtGu
         p.restore()
         p.setPen(Qt.NoPen)
         p.setBrush(QtGui.QColor("#0F172A"))
-        for ex in (26, 38):     # eyes
-            p.drawEllipse(QtCore.QPointF(ex * s, 41 * s), 2.6 * s, 3.4 * s)
+        for ex in (27, 37):     # eyes
+            p.drawEllipse(QtCore.QPointF(ex * s, 43 * s), 2.3 * s, 2.9 * s)
     else:
-        p.save()
-        p.setClipPath(clip)
-        p.setPen(QtGui.QPen(QtGui.QColor(GREY), 3.2 * s, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        p.setPen(QtGui.QPen(QtGui.QColor(GREY), 3 * s, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
         p.setBrush(Qt.NoBrush)
         p.drawPath(cat)
-        p.restore()
-    p.setPen(QtGui.QPen(frame, 4.5 * s))
+    p.setPen(QtGui.QPen(arch, 5 * s, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
     p.setBrush(Qt.NoBrush)
-    p.drawRoundedRect(door, 10 * s, 10 * s)
-    p.setPen(QtGui.QPen(frame, 3.5 * s, Qt.SolidLine, Qt.RoundCap))
-    p.drawLine(QtCore.QPointF(14 * s, 17 * s), QtCore.QPointF(50 * s, 17 * s))
+    p.drawPath(_arch_path(s))
     if error:
         p.setPen(QtGui.QPen(QtGui.QColor("white"), 2 * s))
         p.setBrush(QtGui.QColor(RED))
         p.drawEllipse(QtCore.QRectF(41 * s, 41 * s, 21 * s, 21 * s))
     p.end()
     return pm
+
+
+def app_icon() -> "QtGui.QIcon":
+    """The installed app icon (packaging/catflap.svg via the icon theme), falling
+    back to the drawn tray-style icon when it isn't installed (e.g. from source)."""
+    import os
+    for name in (os.environ.get("FLATPAK_ID", ""), "catflap"):
+        if name and QtGui.QIcon.hasThemeIcon(name):
+            return QtGui.QIcon.fromTheme(name)
+    return QtGui.QIcon(make_pixmap(["#3B82F6"], size=128))
 
 
 def make_icon(colors: list[str], error: bool = False, size: int = 64) -> "QtGui.QIcon":

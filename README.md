@@ -442,9 +442,9 @@ button. With no sites yet, it shows a big **Add your first site** button.
 
 ### Tray icon
 
-- **The icon:** the app's cat in its cat flap.
+- **The icon:** the app's cat sitting in its tunnel.
   - **Grey outline:** nothing connected.
-  - **Cat and frame in the site's colour:** connected.
+  - **Cat and tunnel in the site's colour:** connected.
   - **Striped cat:** several sites connected, one stripe per site's colour.
   - **Red dot:** the last connection attempt failed.
 - **Clicking it:**

@@ -3,6 +3,14 @@
 Versions are `MAJOR.MINOR`; the minor number runs 0–9 and then rolls over
 (1.9 → 2.0). Every release is tagged `vMAJOR.MINOR`.
 
+## 0.4
+
+- New app icon (T1): the first icon's cat sitting in a blue tunnel.
+- Tray icon redrawn to match: grey outline when disconnected, cat and tunnel in
+  the site's colour when connected, red dot after a failure.
+- Windows, wizards and the update window use the installed app icon, so changing
+  `packaging/catflap.svg` changes it everywhere.
+
 ## 0.3
 
 - New update window: what's new, the exact commands to update by hand (with
