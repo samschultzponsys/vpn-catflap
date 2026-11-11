@@ -7,7 +7,7 @@ the install method, which is detected and shown in the app:
 =============  ==================================================  ==========
 method         update                                              automatic
 =============  ==================================================  ==========
-flatpak        download the release .flatpak bundle, then          if allowed*
+flatpak        download the release .flatpak bundle, then          if allowed (*)
                ``flatpak install --user -y <bundle>``
 rpm            ``pkexec dnf install <release .rpm URL>``           yes
 deb            download .deb, ``pkexec apt install ./file.deb``    yes
@@ -17,7 +17,7 @@ windows        download and run the release installer             yes
 source         ``git fetch --tags && git checkout vX.Y``          no
 =============  ==================================================  ==========
 
-\* The sandbox can't run host ``flatpak`` commands unless the user grants it
+(*) The sandbox can't run host ``flatpak`` commands unless the user grants it
 (``flatpak override --user --talk-name=org.freedesktop.Flatpak <app-id>``).
 Without that, catflap downloads the bundle to ~/Downloads and shows the one
 command to run.

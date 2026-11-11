@@ -1,3 +1,4 @@
+import os
 import json
 
 import pytest
@@ -51,7 +52,7 @@ def test_install_imports_with_sanitized_filename_and_safe_settings():
     uuid = NetworkManagerBackend(r).install(profile(), cfg())
     assert uuid == "0f6b0a8e-1111-2222-3333-444455556666"
     (path, text), = r.files.items()
-    assert path.endswith("/cf-home.conf")            # problem 2
+    assert os.path.basename(path) == "cf-home.conf"   # problem 2
     assert "DNS" not in text and "0.0.0.0/0" not in text
     modify = next(c for c in r.cmds if c[1:3] == ["connection", "modify"])
     pairs = dict(zip(modify[5::2], modify[6::2]))
