@@ -498,7 +498,9 @@ flatpak override --user --talk-name=org.freedesktop.Flatpak io.github.samschultz
 That permission lets the app run commands on the host, so it is off by default.
 
 Maintainers: `scripts/bump_version.py` moves to the next version (with rollover)
-in every file. Then add a `CHANGELOG.md` entry, commit, and push tag `v<version>`.
+in every file. Then add a `CHANGELOG.md` entry and push to `main`: the release
+workflow sees the new version, builds everything and creates tag `v<version>`
+and the release. Pushing a `v<version>` tag works too.
 The release workflow attaches these files, each named with the version, to the
 GitHub release: `catflap-<v>.tar.gz`, `catflap-<v>-py3-none-any.whl`,
 `catflap-<v>-1.noarch.rpm` (about 100 KB each) and `catflap-<v>.flatpak` (about

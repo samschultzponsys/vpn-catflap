@@ -1,23 +1,55 @@
-# Runs only when a version tag (vMAJOR.MINOR) is pushed. Every asset carries the
-# version in its name: catflap-X.Y.tar.gz, catflap-X.Y-py3-none-any.whl,
-# catflap-X.Y-1.noarch.rpm, catflap-X.Y.flatpak (~12 MB). Release assets don't
-# count against Actions/Packages storage; the only Actions storage used is
-# workflow artifacts handed between jobs, which expire after one day. No
-# caches and no GitHub Packages are used.
+# Publishes a release when catflap/version.py changes on main (or when a vX.Y
+# tag is pushed, or when started by hand). If release vX.Y already exists,
+# nothing is built. GitHub creates the vX.Y tag on the released commit.
+#
+# Every asset carries the version in its name: catflap-X.Y.tar.gz,
+# catflap-X.Y-py3-none-any.whl, catflap-X.Y-1.noarch.rpm, catflap-X.Y.flatpak.
+# All releases and assets are kept: release files don't count against Actions
+# or Packages storage. The only Actions storage used is the files passed
+# between jobs (expire after one day). No caches, no GitHub Packages.
 name: release
 on:
   push:
+    branches: [main]
+    paths: ["catflap/version.py"]
     tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release
   cancel-in-progress: false
 
 jobs:
+  meta:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      release: ${{ steps.v.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v=$(python3 scripts/bump_version.py --check)
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            python3 scripts/bump_version.py --tag "$GITHUB_REF_NAME"
+          fi
+          if gh release view "v$v" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release v$v already exists; nothing to do."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
+    needs: meta
+    if: needs.meta.outputs.release == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -25,9 +57,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - name: Tag must match catflap/version.py (MAJOR.MINOR, minor 0-9)
-        run: python scripts/bump_version.py --tag "${GITHUB_REF_NAME}" && python scripts/bump_version.py --check
-      - run: python -m pip install build pytest keyring cryptography
+      - run: python -m pip install -q build pytest keyring cryptography
       - run: python -m pytest -q
       - run: python -m build
       - uses: actions/upload-artifact@v4
@@ -37,6 +67,8 @@ jobs:
           retention-days: 1
 
   windows-tests:
+    needs: meta
+    if: needs.meta.outputs.release == 'true'
     runs-on: windows-latest
     timeout-minutes: 15
     steps:
@@ -48,7 +80,7 @@ jobs:
       - run: python -m pytest -q
 
   rpm:
-    needs: build
+    needs: [meta, build]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     container: fedora:latest
@@ -59,7 +91,7 @@ jobs:
           name: dist
           path: dist
       - run: >
-          dnf install -y rpm-build python3-devel pyproject-rpm-macros python3-pytest
+          dnf install -y -q rpm-build python3-devel pyproject-rpm-macros python3-pytest
           python3-setuptools python3-pip python3-wheel python3-packaging desktop-file-utils
           python3-keyring python3-cryptography
       # dist tag left out so the file is simply catflap-X.Y-1.noarch.rpm
@@ -71,7 +103,8 @@ jobs:
           retention-days: 1
 
   flatpak:
-    needs: build
+    needs: meta
+    if: needs.meta.outputs.release == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
@@ -84,7 +117,7 @@ jobs:
           flatpak install --user -y --noninteractive flathub org.kde.Sdk//6.11 org.kde.Platform//6.11 io.qt.PySide.BaseApp//6.11
       - name: Build bundle
         run: |
-          v="${GITHUB_REF_NAME#v}"
+          v="${{ needs.meta.outputs.version }}"
           flatpak-builder --user --disable-rofiles-fuse --force-clean --repo=repo build-dir \
             packaging/flatpak/io.github.samschultzponsys.CatFlap.yml
           flatpak build-bundle --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo \
@@ -96,7 +129,7 @@ jobs:
           retention-days: 1
 
   publish:
-    needs: [build, windows-tests, rpm, flatpak]
+    needs: [meta, build, windows-tests, rpm, flatpak]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -105,9 +138,11 @@ jobs:
         with:
           path: out
           merge-multiple: true
-      - name: Create GitHub release
+      - name: Create GitHub release (and the vX.Y tag)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          notes=$(awk -v v="## ${GITHUB_REF_NAME#v}" '$0==v{f=1;next} /^## /{f=0} f' CHANGELOG.md)
-          gh release create "$GITHUB_REF_NAME" out/* --title "catflap ${GITHUB_REF_NAME#v}" --notes "${notes:-See CHANGELOG.md}"
+          v="${{ needs.meta.outputs.version }}"
+          ls -la out
+          notes=$(awk -v h="## $v" '$0==h{f=1;next} /^## /{f=0} f' CHANGELOG.md)
+          gh release create "v$v" out/* --target "$GITHUB_SHA" --title "catflap $v" --notes "${notes:-See CHANGELOG.md}"
