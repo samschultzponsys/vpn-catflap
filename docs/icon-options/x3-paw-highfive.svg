@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><!-- X3: paw raised out of the tunnel, palm facing you -->
+<defs><linearGradient id="t" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3B82F6"/><stop offset="1" stop-color="#1E3A8A"/></linearGradient>
+<radialGradient id="glow" cx=".5" cy=".9" r=".65"><stop offset="0" stop-color="#1D4ED8" stop-opacity=".5"/><stop offset="1" stop-color="#0B1533" stop-opacity="0"/></radialGradient>
+<linearGradient id="fur" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#E2E8F0"/></linearGradient><linearGradient id="a" gradientUnits="userSpaceOnUse" x1="64" y1="112" x2="64" y2="92"><stop offset="0" stop-color="#0B1533"/><stop offset=".28" stop-color="#CBD5E1"/><stop offset=".5" stop-color="#F1F5F9"/><stop offset="1" stop-color="#FFFFFF"/></linearGradient></defs>
+<rect x="6" y="6" width="116" height="116" rx="26" fill="url(#t)"/>
+<path d="M18 110 V66 A46 46 0 0 1 110 66 V110" fill="none" stroke="#BFDBFE" stroke-width="7" stroke-linecap="round"/>
+<path d="M30 110 V68 A34 34 0 0 1 98 68 V110" fill="none" stroke="#93C5FD" stroke-width="5" stroke-linecap="round" opacity=".75"/>
+<path d="M38 110 V70 A26 26 0 0 1 90 70 V110 Z" fill="#0B1533"/>
+<path d="M46 110 V76 A18 18 0 0 1 82 76 V110" fill="none" stroke="#17306B" stroke-width="2.5"/>
+<path d="M53 110 V80 A11 11 0 0 1 75 80 V110" fill="none" stroke="#142757" stroke-width="2"/>
+<path d="M38 110 V70 A26 26 0 0 1 90 70 V110 Z" fill="url(#glow)"/><path d="M55 110 C55 102 54 96 52 92 L76 92 C74 96 73 102 73 110 Z" fill="url(#a)"/><g transform="translate(64 84) rotate(-8) scale(.92)"><g fill="url(#fur)" stroke="#93C5FD" stroke-width="1">
+<ellipse cx="-14.5" cy="-13" rx="6.6" ry="7.4"/><ellipse cx="-5.3" cy="-20" rx="6.8" ry="7.8"/>
+<ellipse cx="5.3" cy="-20" rx="6.8" ry="7.8"/><ellipse cx="14.5" cy="-13" rx="6.6" ry="7.4"/>
+<path d="M-17 5 C-18.5 -9 -9 -14 0 -14 C9 -14 18.5 -9 17 5 C15.5 16 8 20 0 20 C-8 20 -15.5 16 -17 5 Z"/></g>
+<path d="M0 -3 C6 -3 11.5 2.5 11.5 7.5 C11.5 11.5 8 12.5 4.5 11.5 C2.5 11 1.3 10.4 0 10.4 C-1.3 10.4 -2.5 11 -4.5 11.5 C-8 12.5 -11.5 11.5 -11.5 7.5 C-11.5 2.5 -6 -3 0 -3 Z" fill="#93C5FD"/>
+<g fill="#93C5FD"><ellipse cx="-14" cy="-12.5" rx="3.2" ry="4" transform="rotate(-22 -14 -12.5)"/><ellipse cx="-5.2" cy="-19" rx="3.2" ry="4.2"/>
+<ellipse cx="5.2" cy="-19" rx="3.2" ry="4.2"/><ellipse cx="14" cy="-12.5" rx="3.2" ry="4" transform="rotate(22 14 -12.5)"/></g></g>
+</svg>

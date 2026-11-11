@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><!-- X1: forearm and paw coming out of the tunnel towards you -->
+<defs><linearGradient id="t" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3B82F6"/><stop offset="1" stop-color="#1E3A8A"/></linearGradient>
+<radialGradient id="glow" cx=".5" cy=".9" r=".65"><stop offset="0" stop-color="#1D4ED8" stop-opacity=".5"/><stop offset="1" stop-color="#0B1533" stop-opacity="0"/></radialGradient>
+<linearGradient id="fur" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#E2E8F0"/></linearGradient><linearGradient id="a" gradientUnits="userSpaceOnUse" x1="64" y1="78" x2="64" y2="104"><stop offset="0" stop-color="#0B1533"/><stop offset=".28" stop-color="#CBD5E1"/><stop offset=".5" stop-color="#F1F5F9"/><stop offset="1" stop-color="#FFFFFF"/></linearGradient></defs>
+<rect x="6" y="6" width="116" height="116" rx="26" fill="url(#t)"/>
+<path d="M18 110 V66 A46 46 0 0 1 110 66 V110" fill="none" stroke="#BFDBFE" stroke-width="7" stroke-linecap="round"/>
+<path d="M30 110 V68 A34 34 0 0 1 98 68 V110" fill="none" stroke="#93C5FD" stroke-width="5" stroke-linecap="round" opacity=".75"/>
+<path d="M38 110 V70 A26 26 0 0 1 90 70 V110 Z" fill="#0B1533"/>
+<path d="M46 110 V76 A18 18 0 0 1 82 76 V110" fill="none" stroke="#17306B" stroke-width="2.5"/>
+<path d="M53 110 V80 A11 11 0 0 1 75 80 V110" fill="none" stroke="#142757" stroke-width="2"/>
+<path d="M38 110 V70 A26 26 0 0 1 90 70 V110 Z" fill="url(#glow)"/><ellipse cx="64" cy="112.5" rx="21" ry="3" fill="#000" opacity=".35"/><path d="M59 78 C58.5 86 50 94 47.5 104 L80.5 104 C78 94 69.5 86 69 78 Z" fill="url(#a)"/><g transform="translate(64 105) scale(1.1 1)"><path d="M-17 -10 C-17 -16 -9 -18 0 -18 C9 -18 17 -16 17 -10 L17 2 C17 8 14 11 10.5 10.5 C9.5 13.5 5.5 14.5 3.3 12.2 C1.5 14.5 -1.5 14.5 -3.3 12.2 C-5.5 14.5 -9.5 13.5 -10.5 10.5 C-14 11 -17 8 -17 2 Z" fill="url(#fur)" stroke="#93C5FD" stroke-width="1"/>
+<path d="M6.8 11.5 Q7 8 6.5 5.5 M0 13 Q0 9 0 6 M-6.8 11.5 Q-7 8 -6.5 5.5" fill="none" stroke="#93C5FD" stroke-width="1.4" stroke-linecap="round"/></g>
+</svg>

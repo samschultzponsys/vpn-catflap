@@ -32,3 +32,6 @@ shapes must not rely on clipping to look right.
 | T1 | `t1-tunnel-white-cat.svg` | Blue tunnel background with the first icon's cat, in white |
 | T2 | `t2-tunnel-sky-cat.svg` | Same, with a soft sky-blue cat |
 | T3 | `t3-tunnel-green-cat.svg` | Same, with the first icon's original green cat |
+| X1 | `x1-paw-out.svg` | Blue tunnel; a white forearm and paw coming out towards you, toes over the edge |
+| X2 | `x2-paw-swat.svg` | Blue tunnel; a white paw swatting out sideways, beans showing |
+| X3 | `x3-paw-highfive.svg` | Blue tunnel; a white paw raised out of the tunnel, palm facing you |
