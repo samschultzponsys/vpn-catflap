@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><!-- Z4b: bigger white front-facing cat in the tunnel mouth -->
+<defs><linearGradient id="t" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3B82F6"/><stop offset="1" stop-color="#1E3A8A"/></linearGradient></defs>
+<rect x="6" y="6" width="116" height="116" rx="26" fill="url(#t)"/>
+<path d="M18 110 V66 A46 46 0 0 1 110 66 V110" fill="none" stroke="#BFDBFE" stroke-width="7" stroke-linecap="round"/>
+<path d="M30 110 V68 A34 34 0 0 1 98 68 V110" fill="none" stroke="#93C5FD" stroke-width="5" stroke-linecap="round" opacity=".75"/>
+<path d="M38 110 V70 A26 26 0 0 1 90 70 V110 Z" fill="#0B1533"/><g transform="translate(62 113) scale(1.0)"><path d="M19 -5 C29 -5 32 -13 27 -17.5 C25 -19.5 22.5 -18.5 23.5 -16.5 C26 -12.5 24 -9 18 -9.5" fill="#F8FAFC"/>
+<path d="M-15 -31 C-21 -24 -23 -13 -22 -7 C-21.5 -2 -18 0 -12 0 L12 0 C18 0 21.5 -2 22 -7 C23 -13 21 -24 15 -31 Z" fill="#F8FAFC"/>
+<path d="M-20.5 -46 C-21.5 -53 -20.5 -62 -17.5 -69.5 C-13.5 -66.5 -9.5 -63 -6.5 -60.5 C-2.2 -61.6 2.2 -61.6 6.5 -60.5 C9.5 -63 13.5 -66.5 17.5 -69.5 C20.5 -62 21.5 -53 20.5 -46 C20 -35.5 11.5 -29.5 0 -29.5 C-11.5 -29.5 -20 -35.5 -20.5 -46 Z" fill="#F8FAFC"/>
+<circle cx="-8.2" cy="-46" r="5.6" fill="#0B1533"/><circle cx="8.2" cy="-46" r="5.6" fill="#0B1533"/>
+<circle cx="-8.2" cy="-46" r="3" fill="#FFFFFF"/><circle cx="8.2" cy="-46" r="3" fill="#FFFFFF"/>
+<path d="M0 -37.2 C-0.8 -38.6 -2.6 -38.4 -2.6 -37 C-2.6 -36 -1.2 -35 0 -34.2 C1.2 -35 2.6 -36 2.6 -37 C2.6 -38.4 0.8 -38.6 0 -37.2 Z" fill="#0B1533"/>
+<path d="M-17.5 -39 L-27.5 -41 M-17.5 -36 L-27 -35 M17.5 -39 L27.5 -41 M17.5 -36 L27 -35" stroke="#F8FAFC" stroke-width="1.4" stroke-linecap="round"/></g>
+</svg>

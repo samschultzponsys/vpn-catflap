@@ -43,3 +43,5 @@ shapes must not rely on clipping to look right.
 | Z1c | `z1c-cat-front.svg` | Cat sitting in front of the tunnel, reaching up |
 | Z2 | `z2-paw-line.svg` | Centred line-style paw rising out of the tunnel |
 | Z3 | `z3-paw-solid.svg` | Centred solid paw rising out of the tunnel |
+| Z4a | `z4a-front-cat-tunnel.svg` | White front-facing sitting cat in the tunnel (inverted: dark eye rings, white pupils) |
+| Z4b | `z4b-front-cat-big.svg` | Same cat, bigger, filling the tunnel mouth |
