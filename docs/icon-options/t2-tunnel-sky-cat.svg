@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><!-- T2: tunnel background, A's cat in soft sky blue -->
+<defs><linearGradient id="t" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3B82F6"/><stop offset="1" stop-color="#1E3A8A"/></linearGradient>
+<linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F8FAFC"/><stop offset="1" stop-color="#BFDBFE"/></linearGradient>
+<linearGradient id="grn" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4ADE80"/><stop offset="1" stop-color="#16A34A"/></linearGradient></defs>
+<rect x="6" y="6" width="116" height="116" rx="26" fill="url(#t)"/>
+<path d="M18 110 V66 A46 46 0 0 1 110 66 V110" fill="none" stroke="#BFDBFE" stroke-width="7" stroke-linecap="round"/>
+<path d="M30 110 V68 A34 34 0 0 1 98 68 V110" fill="none" stroke="#93C5FD" stroke-width="5" stroke-linecap="round" opacity=".75"/>
+<path d="M38 110 V70 A26 26 0 0 1 90 70 V110 Z" fill="#0B1533"/>
+<g transform="translate(11.52 25.54) scale(0.82)"><path d="M38 103 L38 74 Q38 66 42 62 L44 49 L56 59 Q64 56.5 72 59 L84 49 L86 62 Q90 66 90 74 L90 103 Z" fill="url(#sky)"/>
+<path d="M46 54 L47 61 L52 59 Z" fill="#1E3A8A" opacity=".45"/><path d="M82 54 L81 61 L76 59 Z" fill="#1E3A8A" opacity=".45"/>
+<ellipse cx="54" cy="77" rx="4.2" ry="5.4" fill="#0F172A"/><ellipse cx="74" cy="77" rx="4.2" ry="5.4" fill="#0F172A"/>
+<circle cx="55.4" cy="75.2" r="1.4" fill="#FFFFFF"/><circle cx="75.4" cy="75.2" r="1.4" fill="#FFFFFF"/>
+<path d="M61 85 L67 85 L64 88.5 Z" fill="#0F172A"/>
+<path d="M64 88.5 Q61 92 58 90 M64 88.5 Q67 92 70 90" fill="none" stroke="#0F172A" stroke-width="1.6" stroke-linecap="round"/></g>
+</svg>
