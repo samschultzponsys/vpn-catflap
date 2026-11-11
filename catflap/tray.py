@@ -46,45 +46,66 @@ def require_qt() -> None:
 
 
 # ============================================================ icon
-def make_icon(colors: list[str], error: bool = False, size: int = 64) -> "QtGui.QIcon":
-    """A cat flap: a rounded door with a swinging flap.
+def _cat_path(s: float) -> "QtGui.QPainterPath":
+    """Cat head (same shape as the app icon), in 64x64 units scaled by ``s``."""
+    pts = [(19, 54), (19, 37), (21, 31), (22, 22), (28, 28), (32, 27), (36, 28), (42, 22),
+           (43, 31), (45, 37), (45, 54)]
+    path = QtGui.QPainterPath()
+    path.moveTo(pts[0][0] * s, pts[0][1] * s)
+    for x, y in pts[1:]:
+        path.lineTo(x * s, y * s)
+    path.closeSubpath()
+    return path
 
-    Disconnected: grey outline, empty. Connected: flap filled with the
-    connection colour(s). Error: red badge in the corner.
+
+def make_icon(colors: list[str], error: bool = False, size: int = 64) -> "QtGui.QIcon":
+    """Tray icon: the app icon's cat in its cat flap.
+
+    Disconnected: grey frame, cat drawn as an outline only. Connected: the cat
+    is filled with the connection colour (split into stripes when several sites
+    are up). Error: red badge in the corner.
     """
     pm = QtGui.QPixmap(size, size)
     pm.fill(Qt.transparent)
     p = QtGui.QPainter(pm)
     p.setRenderHint(QtGui.QPainter.Antialiasing)
     s = size / 64.0
-    door = QtCore.QRectF(6 * s, 6 * s, 52 * s, 52 * s)
-    flap = QtCore.QRectF(16 * s, 22 * s, 32 * s, 30 * s)
-    outline = QtGui.QColor(colors[0] if len(colors) == 1 else ("#E5E7EB" if colors else GREY))
-    pen = QtGui.QPen(outline, 5 * s)
-    p.setPen(pen)
-    p.setBrush(Qt.NoBrush)
-    p.drawRoundedRect(door, 12 * s, 12 * s)
+    door = QtCore.QRectF(8 * s, 9 * s, 48 * s, 47 * s)
+    # Frame in the connection colour so it reads on light and dark panels.
+    frame = QtGui.QColor(GREY if not colors else colors[0] if len(colors) == 1 else "#64748B")
+    clip = QtGui.QPainterPath()
+    clip.addRoundedRect(door, 10 * s, 10 * s)
+    cat = _cat_path(s)
     if colors:
-        path = QtGui.QPainterPath()
-        path.addRoundedRect(flap, 8 * s, 8 * s)
-        p.setPen(Qt.NoPen)
+        p.save()
+        p.setClipPath(clip.intersected(cat))
+        bounds = cat.boundingRect()
         n = len(colors)
         for i, c in enumerate(colors):
-            seg = QtCore.QRectF(flap.x() + flap.width() * i / n, flap.y(), flap.width() / n, flap.height())
-            p.save()
-            p.setClipPath(path)
+            seg = QtCore.QRectF(bounds.x() + bounds.width() * i / n, bounds.y(),
+                                bounds.width() / n + 1, bounds.height())
             p.fillRect(seg, QtGui.QColor(c))
-            p.restore()
+        p.restore()
+        p.setPen(Qt.NoPen)
+        p.setBrush(QtGui.QColor("#0F172A"))
+        for ex in (26, 38):     # eyes
+            p.drawEllipse(QtCore.QPointF(ex * s, 41 * s), 2.6 * s, 3.4 * s)
     else:
-        p.setPen(QtGui.QPen(QtGui.QColor(GREY), 4 * s))
-        p.drawRoundedRect(flap, 8 * s, 8 * s)
-    # hinge line
-    p.setPen(QtGui.QPen(outline if colors else QtGui.QColor(GREY), 4 * s))
-    p.drawLine(QtCore.QPointF(14 * s, 18 * s), QtCore.QPointF(50 * s, 18 * s))
+        p.save()
+        p.setClipPath(clip)
+        p.setPen(QtGui.QPen(QtGui.QColor(GREY), 3.2 * s, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        p.setBrush(Qt.NoBrush)
+        p.drawPath(cat)
+        p.restore()
+    p.setPen(QtGui.QPen(frame, 4.5 * s))
+    p.setBrush(Qt.NoBrush)
+    p.drawRoundedRect(door, 10 * s, 10 * s)
+    p.setPen(QtGui.QPen(frame, 3.5 * s, Qt.SolidLine, Qt.RoundCap))
+    p.drawLine(QtCore.QPointF(14 * s, 17 * s), QtCore.QPointF(50 * s, 17 * s))
     if error:
         p.setPen(QtGui.QPen(QtGui.QColor("white"), 2 * s))
         p.setBrush(QtGui.QColor(RED))
-        p.drawEllipse(QtCore.QRectF(40 * s, 40 * s, 22 * s, 22 * s))
+        p.drawEllipse(QtCore.QRectF(41 * s, 41 * s, 21 * s, 21 * s))
     p.end()
     return QtGui.QIcon(pm)
 
@@ -712,6 +733,7 @@ def main(argv: list[str] | None = None) -> int:
     qapp.setQuitOnLastWindowClosed(False)
     if not QtWidgets.QSystemTrayIcon.isSystemTrayAvailable():
         print("catflap: no system tray available; showing the window only", file=sys.stderr)
+    qapp.setWindowIcon(make_icon(["#22C55E"]))
     app = TrayApp(qapp)
     # Quit cleanly on logout/SIGTERM/Ctrl+C: Python only handles signals while
     # it runs, so wake the interpreter regularly.

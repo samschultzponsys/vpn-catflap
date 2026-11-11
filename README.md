@@ -1,3 +1,5 @@
+<img src="packaging/catflap.svg" alt="catflap icon" width="96" align="right">
+
 # VPN CatFlap (`catflap`)
 
 Safe, one-click WireGuard remote access to your sites, from a tray icon. A
@@ -367,9 +369,9 @@ catflap apply --all
 
 Start it with `catflap-tray`, or `catflap tray` (add `--minimized` to start hidden).
 
-- **Icon:** a cat flap. **Grey outline** = nothing connected. **Filled with the
-  site's colour** = connected. Several sites up = split into each site's colour.
-  **Red dot** = the last connection attempt failed.
+- **Icon:** the app's cat in its cat flap. **Grey outline** = nothing connected.
+  **Cat and frame in the site's colour** = connected. Several sites up = the cat is
+  striped in each site's colour. **Red dot** = the last connection attempt failed.
 - **Left-click** the icon to show or hide the window. **Right-click** shows sites grouped by
   gateway and vendor. Click a site to connect or disconnect it. Each entry shows
   its status (connected, handshake age, error).
