@@ -35,3 +35,6 @@ shapes must not rely on clipping to look right.
 | X1 | `x1-paw-out.svg` | Blue tunnel; a white forearm and paw coming out towards you, toes over the edge |
 | X2 | `x2-paw-swat.svg` | Blue tunnel; a white paw swatting out sideways, beans showing |
 | X3 | `x3-paw-highfive.svg` | Blue tunnel; a white paw raised out of the tunnel, palm facing you |
+| Y1 | `y1-paw-through-pink.svg` | Blue tunnel; a cartoon white paw pushing through towards you, pink toe beans |
+| Y2 | `y2-paw-through-blue.svg` | Same, light-blue toe beans |
+| Y3 | `y3-paw-big-pink.svg` | Bigger paw reaching further out past the tunnel edge, pink toe beans |
