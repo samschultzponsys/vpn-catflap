@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><!-- D: Minimal line -->
+<rect x="6" y="6" width="116" height="116" rx="26" fill="#16A34A"/>
+<rect x="26" y="26" width="76" height="80" rx="16" fill="none" stroke="#fff" stroke-width="7"/>
+<line x1="36" y1="40" x2="92" y2="40" stroke="#fff" stroke-width="6" stroke-linecap="round"/>
+<path d="M40 106 V76 Q40 69 44 65 L46 52 L57 61 Q64 59 71 61 L82 52 L84 65 Q88 69 88 76 V106" fill="none" stroke="#fff" stroke-width="6" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="55" cy="80" r="4" fill="#fff"/><circle cx="73" cy="80" r="4" fill="#fff"/></svg>

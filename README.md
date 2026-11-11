@@ -31,7 +31,7 @@ connection with safe defaults. It works with **UniFi**, **TP-Link Omada**,
 3. [Quick start](#quick-start)
 4. [Creating API keys per vendor](#creating-api-keys-per-vendor)
 5. [How-to guides](#how-to-guides)
-6. [Tray app](#tray-app)
+6. [Using the app](#using-the-app)
 7. [Command reference](#command-reference)
 8. [What catflap enforces (and why)](#what-catflap-enforces-and-why)
 9. [Where things are stored](#where-things-are-stored)
@@ -188,7 +188,8 @@ catflap provision home home --network LAN --network IoT
 catflap up home
 ```
 
-Or start the tray app (`catflap-tray`) and use **Add gateway…** and **Add site…**.
+Or just open the app: the setup guide walks you through the same steps without
+a terminal (see [Using the app](#using-the-app)).
 
 ### Any gateway: import a downloaded .conf
 
@@ -365,34 +366,107 @@ catflap apply home
 catflap apply --all
 ```
 
-## Tray app
+## Using the app
 
-Start it with `catflap-tray`, or `catflap tray` (add `--minimized` to start hidden).
+Start **catflap** from your application menu (or run `catflap-tray`; add
+`--minimized` to start hidden in the tray).
 
-- **Icon:** the app's cat in its cat flap. **Grey outline** = nothing connected.
-  **Cat and frame in the site's colour** = connected. Several sites up = the cat is
-  striped in each site's colour. **Red dot** = the last connection attempt failed.
-- **Left-click** the icon to show or hide the window. **Right-click** shows sites grouped by
-  gateway and vendor. Click a site to connect or disconnect it. Each entry shows
-  its status (connected, handshake age, error).
-- **Colours:** select a site in the window → **Colour…**, or
-  `catflap set home --color '#1F77D0'`.
+### First start
+
+A short setup guide opens the first time:
+
+1. **Welcome.** What catflap does, in plain words.
+2. **Choose a look,** with a live example of each:
+   - **Basic:** one big card per site with a **Connect** button. Best if you
+     just want it to work.
+   - **Advanced:** tables with every detail (routes, endpoints, gateways, checks)
+     and all the management tools.
+
+   Switch any time from **View → Basic / Advanced** or the link at the bottom
+   of the window.
+3. **Add your first site.** The *Add a site* guide starts right away.
+
+You can run the setup guide again from **Help → Setup guide…**.
+
+### Adding a site (the guide)
+
+**File → Add a site…**, the **Add a site** button, or **Add a site…** in the tray
+menu. The guide asks one thing at a time:
+
+1. **What kind of router is at the site?** UniFi, TP-Link Omada, Alta Labs, or
+   another WireGuard router / a `.conf` file. If you've already added a UniFi
+   router, you can pick it.
+2. **UniFi (automatic):**
+   - **Router address and API key.** The page explains where to create the key.
+     catflap tests the connection before moving on. The key is saved only in
+     this computer's keyring. *More options* holds a local admin login and the
+     self-hosted controller setting, needed only if catflap asks for them.
+   - **Which site** (if your console manages several).
+   - **VPN server check.** If the router has no WireGuard server yet, or it was
+     never applied, the page shows exactly what to click in UniFi and has a
+     **Check again** button. It also warns in plain words about CGNAT or a
+     second router in front.
+   - **What do you want to reach?** Tick the networks. Networks that clash with
+     the one you're on now are marked.
+3. **Omada / Alta Labs / other (file):** the page says where to download the
+   WireGuard file on that router. Then pick the file and type the router's
+   address at the site (e.g. `192.168.1.1`). Under *More options* you can add
+   extra networks and a DDNS name.
+4. **Name and colour:** e.g. "Home", "Mum's house". The colour is used by the tray
+   icon while connected. Tick *Connect as soon as it's set up* if you like.
+5. **Done:** a summary of what was set up and how it's kept safe.
+
+**Add a gateway…** (File menu, or the Gateways tab in Advanced) adds a UniFi
+router without adding a site yet.
+
+### Basic view
+
+One card per site: its name, its colour, its state (*Connected*, *Not
+connected*, or *Couldn't connect: <reason>*), and one **Connect / Disconnect**
+button. With no sites yet, it shows a big **Add your first site** button.
+
+### Advanced view
+
+- **Sites tab:** a table (site, gateway, status, interface, routes, endpoint)
+  and a details pane (tunnel address, VPN subnet, split DNS, device/client id,
+  traffic, warnings, last check results). Buttons:
+  - **Connect / Disconnect**
+  - **Run checks:** pre-flight only.
+  - **Edit…:** name, DDNS name, networks, split DNS.
+  - **Colour…**
+  - **Re-apply settings**
+  - **Remove…:** from this computer only, or also delete this computer's access
+    on the router.
+- **Gateways tab:** your routers, with **Change API key…**, **Remove gateway…**
+  and **Add gateway…**.
+
+### Tray icon
+
+- **The icon:** the app's cat in its cat flap.
+  - **Grey outline:** nothing connected.
+  - **Cat and frame in the site's colour:** connected.
+  - **Striped cat:** several sites connected, one stripe per site's colour.
+  - **Red dot:** the last connection attempt failed.
+- **Clicking it:**
+  - **Left-click** shows or hides the window.
+  - **Right-click** lists your sites with their status. Click one to connect or
+    disconnect it. The menu also has **Add a site…**, **Open catflap** and
+    **Quit**.
+- **Notifications** on connect, disconnect and failure, with the reason in plain words.
+
+### Window and settings
+
 - **Minimize / close:** minimizing hides the window to the tray. Closing it asks
   **Keep running in tray** or **Quit catflap**, with *Remember my choice*.
-  **Settings → Reset close-button choice** brings the question back. Tunnels stay
-  connected either way.
-- **Notifications** on connect, disconnect and failure, with the reason.
-- **Settings:** *Start at login* (XDG autostart on Linux, the Run key on Windows) and
-  *Check for updates automatically*.
-- **File:** *Export everything…* and *Import export file…* (encrypted).
-- **Help → About** shows the version and **how catflap was installed**.
-  **Help → Check for updates…** updates automatically or shows the commands
-  to run.
-- **Add gateway…** (credentials go to the keyring; the certificate fingerprint
-  is shown for you to confirm) and **Add site…**, either *from a gateway* (tick the
-  networks to route) or *from a .conf file*.
+  **Settings → Ask again what the close button does** brings the question back.
+  Connected sites stay connected either way.
+- **Settings:** *Start catflap when I log in* and *Check for updates automatically*.
+- **File:** *Export everything…* and *Import from another computer…* (locked with
+  a passphrase).
+- **Help:** *Setup guide…*, *Check for updates…*, and *About* (version, and **how
+  catflap was installed**).
 
-The tray reloads state every few seconds, so CLI changes show up on their own.
+The window picks up changes made with the command line within a few seconds.
 
 ## Command reference
 

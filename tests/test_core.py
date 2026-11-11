@@ -147,3 +147,14 @@ def test_remove_gateway_in_use(manager):
     manager.provision("home-gw", "home", ["LAN"], device="d")
     with pytest.raises(CatflapError, match="used by"):
         manager.remove_gateway("home-gw")
+
+
+def test_store_reloads_external_changes_only(tmp_path):
+    a, b = Store(tmp_path), Store(tmp_path)
+    a.settings()["x"] = 1
+    a.save()
+    b.reload()
+    assert b.settings()["x"] == 1
+    b.settings()["y"] = 2          # unsaved in-memory change survives a no-op reload
+    b.reload()
+    assert b.settings()["y"] == 2

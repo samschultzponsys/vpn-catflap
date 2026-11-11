@@ -67,7 +67,7 @@ class Manager:
                     fingerprint: str | None = None, ca_file: str | None = None,
                     insecure: bool = False, options: dict[str, Any] | None = None) -> GatewayConfig:
         get_driver_class(vendor)  # validates vendor
-        if not name or netutil.sanitize_ifname(name, prefix="") != name.lower():
+        if not name or netutil.slug(name, 64) != name.lower():
             raise CatflapError("gateway names may only use letters, digits, '-' and '_'")
         gw = GatewayConfig(name=name, vendor=vendor, url=url.rstrip("/"), username=username,
                            fingerprint=fingerprint, ca_file=ca_file, insecure=insecure,
@@ -110,6 +110,25 @@ class Manager:
         return s, d.list_networks(s)
 
     # ================================================================ helpers
+    def unique_profile_name(self, label: str) -> str:
+        """A CLI-safe profile name from a friendly label ("Ponsys Office" -> "ponsys-office")."""
+        base = netutil.slug(label, 32) or "site"
+        taken = set(self.store.profiles())
+        name, i = base, 2
+        while name in taken:
+            name = f"{base}-{i}"
+            i += 1
+        return name
+
+    def unique_gateway_name(self, label: str) -> str:
+        base = netutil.slug(label, 32) or "gateway"
+        taken = set(self.store.gateways())
+        name, i = base, 2
+        while name in taken:
+            name = f"{base}-{i}"
+            i += 1
+        return name
+
     def _taken_ifnames(self, exclude: str | None = None) -> list[str]:
         return [p.ifname for p in self.store.profiles().values() if p.name != exclude]
 
@@ -158,7 +177,7 @@ class Manager:
         return p
 
     def _check_new_name(self, name: str, replace: bool) -> Profile | None:
-        if not name or netutil.sanitize_ifname(name, prefix="") != name.lower():
+        if not name or netutil.slug(name, 64) != name.lower():
             raise CatflapError("profile names may only use letters, digits, '-' and '_'")
         existing = self.store.profiles().get(name)
         if existing and not replace:
@@ -170,7 +189,8 @@ class Manager:
                   device: str | None = None, endpoint: str | None = None,
                   server: str | None = None, dns_domain: str | None = None,
                   dns_servers: list[str] | None = None, replace: bool = False,
-                  install: bool = True, color: str | None = None) -> Outcome:
+                  install: bool = True, color: str | None = None,
+                  label: str | None = None) -> Outcome:
         existing = self._check_new_name(name, replace)
         d = self.driver(gateway)
         s = d.find_site(site)
@@ -233,6 +253,7 @@ class Manager:
                 ping_target=srv.server_address or chosen[0].gateway_ip,
                 networks=[n.__dict__ for n in chosen], wan_ip=wan.wan_ip,
                 warnings=res.warnings, created=_now(), color=color or self._next_color(),
+                label=label or "",
             )
             self._apply_dns(p, dns_domain, dns_servers)
             p = self._finalize(p, res.config, install)
@@ -265,7 +286,8 @@ class Manager:
                     gateway: str | None = None, site: str | None = None,
                     endpoint: str | None = None, dns_domain: str | None = None,
                     dns_servers: list[str] | None = None, replace: bool = False,
-                    install: bool = True, color: str | None = None) -> Outcome:
+                    install: bool = True, color: str | None = None,
+                    label: str | None = None) -> Outcome:
         existing = self._check_new_name(name, replace)
         if gateway:
             drv = self.driver(gateway)
@@ -313,6 +335,7 @@ class Manager:
             ping_target=ping_target, networks=[n.__dict__ for n in chosen_nets],
             has_psk=bool(res.config.preshared_key), mtu=res.config.mtu,
             warnings=res.warnings, created=_now(), color=color or self._next_color(),
+            label=label or "",
         )
         self._apply_dns(p, dns_domain, dns_servers)
         p = self._finalize(p, res.config, install)
@@ -323,7 +346,8 @@ class Manager:
     def update_profile(self, name: str, endpoint: str | None = None,
                        routes: list[str] | None = None, color: str | None = None,
                        dns_domain: str | None = None, dns_servers: list[str] | None = None,
-                       clear_dns: bool = False, ping_target: str | None = None) -> Profile:
+                       clear_dns: bool = False, ping_target: str | None = None,
+                       label: str | None = None) -> Profile:
         p = self.store.profile(name)
         cfg = self._peer_config(p)
         if endpoint:
@@ -333,6 +357,8 @@ class Manager:
             p.routes = res.config.allowed_ips
         if color:
             p.color = color
+        if label is not None:
+            p.label = label
         if ping_target:
             p.ping_target = ping_target
         if clear_dns:

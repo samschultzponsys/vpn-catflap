@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><!-- B: Shield flap -->
+<defs><linearGradient id="s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#22C55E"/><stop offset="1" stop-color="#15803D"/></linearGradient></defs>
+<path d="M64 8 L110 24 V60 C110 90 90 110 64 120 C38 110 18 90 18 60 V24 Z" fill="url(#s)"/>
+<path d="M64 16 L102 29 V60 C102 85 86 102 64 111 C42 102 26 85 26 60 V29 Z" fill="none" stroke="#DCFCE7" stroke-width="3" opacity=".5"/>
+<rect x="38" y="44" width="52" height="50" rx="12" fill="#14532D"/>
+<line x1="42" y1="52" x2="86" y2="52" stroke="#DCFCE7" stroke-width="4" stroke-linecap="round"/>
+<path d="M46 94 V74 Q46 69 49 66 L50 57 L58 64 Q64 62.5 70 64 L78 57 L79 66 Q82 69 82 74 V94 Z" fill="#F0FDF4"/>
+<ellipse cx="57" cy="76" rx="3" ry="4" fill="#14532D"/><ellipse cx="71" cy="76" rx="3" ry="4" fill="#14532D"/>
+<path d="M62 82 H66 L64 84.5 Z" fill="#14532D"/></svg>

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><!-- F: Paw on the flap -->
+<defs><linearGradient id="t" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#14B8A6"/><stop offset="1" stop-color="#0F766E"/></linearGradient></defs>
+<rect x="6" y="6" width="116" height="116" rx="26" fill="url(#t)"/>
+<rect x="24" y="24" width="80" height="80" rx="18" fill="#F0FDFA"/>
+<line x1="34" y1="38" x2="94" y2="38" stroke="#0F766E" stroke-width="6" stroke-linecap="round"/>
+<g fill="#0F766E"><ellipse cx="64" cy="80" rx="15" ry="12"/><ellipse cx="45" cy="64" rx="6" ry="7.5"/><ellipse cx="57" cy="55" rx="6" ry="7.5"/>
+<ellipse cx="71" cy="55" rx="6" ry="7.5"/><ellipse cx="83" cy="64" rx="6" ry="7.5"/></g></svg>

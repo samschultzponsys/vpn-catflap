@@ -10,6 +10,7 @@ import json
 import os
 import sys
 import tempfile
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -43,12 +44,41 @@ class Store:
         self.root = root or config_dir()
         self.path = self.root / "state.json"
         self._data: dict[str, Any] = {"gateways": {}, "profiles": {}, "settings": {}}
-        if self.path.exists():
-            loaded = json.loads(self.path.read_text(encoding="utf-8"))
-            self._data.update(loaded)
+        self._lock = threading.RLock()
+        self._mtime: int | None = None
+        self.reload()
+
+    def _file_mtime(self) -> int | None:
+        try:
+            return self.path.stat().st_mtime_ns
+        except OSError:
+            return None
+
+    def reload(self) -> None:
+        """Re-read the file if something else (e.g. the CLI) changed it since we last
+        read or wrote it. Safe to call from a worker thread; the settings dict keeps
+        its identity."""
+        with self._lock:
+            mtime = self._file_mtime()
+            if mtime is None or mtime == self._mtime:
+                return
+            self._load()
+            self._mtime = mtime
+
+    def _load(self) -> None:
+        loaded = json.loads(self.path.read_text(encoding="utf-8"))
+        settings = self._data.get("settings", {})
+        new = loaded.pop("settings", {})
+        settings.update(new)              # never empty, even briefly (read from other threads)
+        for k in [k for k in settings if k not in new]:
+            settings.pop(k, None)
+        self._data.update(loaded)
+        self._data["settings"] = settings
 
     def save(self) -> None:
-        _atomic_write(self.path, json.dumps(self._data, indent=2, sort_keys=True) + "\n")
+        with self._lock:
+            _atomic_write(self.path, json.dumps(self._data, indent=2, sort_keys=True) + "\n")
+            self._mtime = self._file_mtime()
 
     # gateways ---------------------------------------------------------------
     def gateways(self) -> dict[str, dict[str, Any]]:

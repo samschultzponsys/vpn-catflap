@@ -107,6 +107,11 @@ class Profile:
     warnings: list[str] = field(default_factory=list)
     created: str = ""
     color: str = ""                  # tray colour for this connection, "#RRGGBB"
+    label: str = ""                  # friendly display name, e.g. "Ponsys Office"
+
+    @property
+    def display(self) -> str:
+        return self.label or self.name
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><!-- E: Cat-eared lock -->
+<defs><linearGradient id="t" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1F2937"/><stop offset="1" stop-color="#111827"/></linearGradient>
+<linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FBBF24"/><stop offset="1" stop-color="#F59E0B"/></linearGradient></defs>
+<rect x="6" y="6" width="116" height="116" rx="26" fill="url(#t)"/>
+<path d="M28 108 V58 Q28 46 36 40 L38 18 L56 34 Q64 32 72 34 L90 18 L92 40 Q100 46 100 58 V108 Z" fill="url(#g)"/>
+<circle cx="64" cy="70" r="11" fill="#111827"/><path d="M58 76 L70 76 L67 96 L61 96 Z" fill="#111827"/>
+<ellipse cx="48" cy="54" rx="4" ry="5" fill="#111827"/><ellipse cx="80" cy="54" rx="4" ry="5" fill="#111827"/></svg>

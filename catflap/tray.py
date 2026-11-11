@@ -1,366 +1,110 @@
-"""catflap tray app (Qt / PySide6).
+"""catflap window and tray app (Qt / PySide6).
 
 KDE Plasma on Wayland shows QSystemTrayIcon through StatusNotifierItem;
-Windows uses the notification area. The app:
+Windows uses the notification area.
 
-* lives in the tray; the window minimizes to the tray, and closing it asks
-  whether to keep running in the tray or quit (with "remember my choice");
-* the tray icon is grey/outlined when nothing is connected, and filled with
-  each connected site's own colour (split into segments if several are up),
-  with a red badge when the last attempt failed;
-* groups sites by gateway, click to connect/disconnect, shows notifications;
-* checks for updates once a day and shows how to update for the way catflap
-  was installed.
+* First start: a wizard asks for Basic or Advanced (with live previews) and
+  offers to add the first site with a step-by-step guide.
+* Basic view: one big card per site with a Connect button.
+* Advanced view: sites and gateways tables, details, checks and every action.
+* The window minimizes to the tray; closing asks "keep running in the tray or
+  quit" (with "remember my choice").
+* Tray icon: the cat is a grey outline when nothing is connected, and turns
+  the site's colour when connected (striped for several sites); red badge after
+  a failure.
+* Notifications, start-at-login, daily update check with install-aware
+  update instructions.
 
-All real work happens in :class:`catflap.core.Manager` on a worker thread.
+All real work happens in :class:`catflap.core.Manager` on worker threads.
 """
 
 from __future__ import annotations
 
+import os
 import sys
-import time
-import traceback
-from typing import Any, Callable
+from typing import Any
 
-try:
-    from PySide6 import QtCore, QtGui, QtWidgets
-    from PySide6.QtCore import Qt
-except ImportError:  # pragma: no cover - depends on the platform packages
-    QtCore = QtGui = QtWidgets = None  # type: ignore
-
-from . import autostart, update
+from . import autostart, checks, update
 from .core import Manager
 from .drivers import DRIVERS
 from .model import Profile
-from .store import Store
+from .ui_common import (GREY, QtCore, QtGui, QtWidgets, dot_icon, friendly_error, make_icon,
+                        make_pixmap, require_qt, run_bg, run_blocking, status_text)
 from .version import __version__
 
-GREY = "#8A8F98"
-RED = "#D92D20"
+__all__ = ["MainWindow", "TrayApp", "make_icon", "main"]
 
 
-def require_qt() -> None:
-    if QtWidgets is None:
-        raise SystemExit("The tray app needs PySide6 (Fedora: dnf install python3-pyside6; "
-                         "Debian: apt install python3-pyside6.qtwidgets; pip: PySide6-Essentials)")
-
-
-# ============================================================ icon
-def _cat_path(s: float) -> "QtGui.QPainterPath":
-    """Cat head (same shape as the app icon), in 64x64 units scaled by ``s``."""
-    pts = [(19, 54), (19, 37), (21, 31), (22, 22), (28, 28), (32, 27), (36, 28), (42, 22),
-           (43, 31), (45, 37), (45, 54)]
-    path = QtGui.QPainterPath()
-    path.moveTo(pts[0][0] * s, pts[0][1] * s)
-    for x, y in pts[1:]:
-        path.lineTo(x * s, y * s)
-    path.closeSubpath()
-    return path
-
-
-def make_icon(colors: list[str], error: bool = False, size: int = 64) -> "QtGui.QIcon":
-    """Tray icon: the app icon's cat in its cat flap.
-
-    Disconnected: grey frame, cat drawn as an outline only. Connected: the cat
-    is filled with the connection colour (split into stripes when several sites
-    are up). Error: red badge in the corner.
-    """
-    pm = QtGui.QPixmap(size, size)
-    pm.fill(Qt.transparent)
-    p = QtGui.QPainter(pm)
-    p.setRenderHint(QtGui.QPainter.Antialiasing)
-    s = size / 64.0
-    door = QtCore.QRectF(8 * s, 9 * s, 48 * s, 47 * s)
-    # Frame in the connection colour so it reads on light and dark panels.
-    frame = QtGui.QColor(GREY if not colors else colors[0] if len(colors) == 1 else "#64748B")
-    clip = QtGui.QPainterPath()
-    clip.addRoundedRect(door, 10 * s, 10 * s)
-    cat = _cat_path(s)
-    if colors:
-        p.save()
-        p.setClipPath(clip.intersected(cat))
-        bounds = cat.boundingRect()
-        n = len(colors)
-        for i, c in enumerate(colors):
-            seg = QtCore.QRectF(bounds.x() + bounds.width() * i / n, bounds.y(),
-                                bounds.width() / n + 1, bounds.height())
-            p.fillRect(seg, QtGui.QColor(c))
-        p.restore()
-        p.setPen(Qt.NoPen)
-        p.setBrush(QtGui.QColor("#0F172A"))
-        for ex in (26, 38):     # eyes
-            p.drawEllipse(QtCore.QPointF(ex * s, 41 * s), 2.6 * s, 3.4 * s)
-    else:
-        p.save()
-        p.setClipPath(clip)
-        p.setPen(QtGui.QPen(QtGui.QColor(GREY), 3.2 * s, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
-        p.setBrush(Qt.NoBrush)
-        p.drawPath(cat)
-        p.restore()
-    p.setPen(QtGui.QPen(frame, 4.5 * s))
-    p.setBrush(Qt.NoBrush)
-    p.drawRoundedRect(door, 10 * s, 10 * s)
-    p.setPen(QtGui.QPen(frame, 3.5 * s, Qt.SolidLine, Qt.RoundCap))
-    p.drawLine(QtCore.QPointF(14 * s, 17 * s), QtCore.QPointF(50 * s, 17 * s))
-    if error:
-        p.setPen(QtGui.QPen(QtGui.QColor("white"), 2 * s))
-        p.setBrush(QtGui.QColor(RED))
-        p.drawEllipse(QtCore.QRectF(41 * s, 41 * s, 21 * s, 21 * s))
-    p.end()
-    return QtGui.QIcon(pm)
-
-
-def dot_icon(color: str, filled: bool) -> "QtGui.QIcon":
-    pm = QtGui.QPixmap(16, 16)
-    pm.fill(Qt.transparent)
-    p = QtGui.QPainter(pm)
-    p.setRenderHint(QtGui.QPainter.Antialiasing)
-    p.setPen(QtGui.QPen(QtGui.QColor(color), 2))
-    p.setBrush(QtGui.QColor(color) if filled else Qt.NoBrush)
-    p.drawEllipse(2, 2, 12, 12)
-    p.end()
-    return QtGui.QIcon(pm)
-
-
-# ============================================================ background work
-if QtCore is not None:
-    class _Signals(QtCore.QObject):
-        done = QtCore.Signal(object, object)
-
-    class _Job(QtCore.QRunnable):
-        def __init__(self, fn: Callable[[], Any], cb: Callable[[Any, Any], None]):
-            super().__init__()
-            # Python owns the job: Qt must not delete it (and its signal object)
-            # while the result is still queued for the UI thread.
-            self.setAutoDelete(False)
-            self.fn, self.cb, self.sig = fn, cb, _Signals()
-            self.sig.done.connect(self._finish, QtCore.Qt.QueuedConnection)
-
-        def run(self) -> None:
-            try:
-                result, err = self.fn(), None
-            except Exception as e:  # noqa: BLE001 - reported to the UI
-                traceback.print_exc()
-                result, err = None, e
-            self.sig.done.emit(result, err)
-
-        def _finish(self, result: Any, err: Any) -> None:
-            try:
-                self.cb(result, err)
-            finally:
-                _JOBS.discard(self)
-
-    _JOBS: set = set()
-
-
-def run_bg(fn: Callable[[], Any], cb: Callable[[Any, Any], None]) -> None:
-    job = _Job(fn, cb)
-    _JOBS.add(job)
-    QtCore.QThreadPool.globalInstance().start(job)
-
-
-# ============================================================ dialogs
-class AddGatewayDialog(QtWidgets.QDialog if QtWidgets else object):
-    def __init__(self, parent, manager: Manager):
+# ============================================================ small dialogs
+class EditSiteDialog(QtWidgets.QDialog if QtWidgets else object):
+    def __init__(self, parent, p: Profile):
         super().__init__(parent)
-        self.m = manager
-        self.setWindowTitle("Add gateway")
+        self.setWindowTitle(f"Edit {p.display}")
         f = QtWidgets.QFormLayout(self)
-        self.name = QtWidgets.QLineEdit()
-        self.vendor = QtWidgets.QComboBox()
-        for k, d in DRIVERS.items():
-            self.vendor.addItem(d.display_name, k)
-        self.url = QtWidgets.QLineEdit()
-        self.url.setPlaceholderText("https://192.168.1.1")
-        self.key = QtWidgets.QLineEdit()
-        self.key.setEchoMode(QtWidgets.QLineEdit.Password)
-        self.user = QtWidgets.QLineEdit()
-        self.user.setPlaceholderText("optional local admin (UniFi classic API)")
-        self.pw = QtWidgets.QLineEdit()
-        self.pw.setEchoMode(QtWidgets.QLineEdit.Password)
-        for label, w in (("Name", self.name), ("Vendor", self.vendor), ("URL", self.url),
-                         ("API key", self.key), ("Username", self.user), ("Password", self.pw)):
-            f.addRow(label, w)
-        f.addRow(QtWidgets.QLabel("Credentials are stored only in this PC's keyring."))
-        bb = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
-        bb.accepted.connect(self.save)
+        self.label = QtWidgets.QLineEdit(p.display)
+        self.endpoint = QtWidgets.QLineEdit(p.endpoint_host)
+        self.routes = QtWidgets.QLineEdit(", ".join(p.routes))
+        self.dns_domain = QtWidgets.QLineEdit(p.dns_domain or "")
+        self.dns_domain.setPlaceholderText("e.g. office.lan (optional)")
+        self.dns_server = QtWidgets.QLineEdit(", ".join(p.dns_servers))
+        self.dns_server.setPlaceholderText("DNS server inside the site, e.g. 192.168.1.1")
+        f.addRow("Name", self.label)
+        f.addRow("Site's internet address / DDNS name", self.endpoint)
+        f.addRow("Networks to reach (comma separated)", self.routes)
+        f.addRow("Internal domain (split DNS)", self.dns_domain)
+        f.addRow("DNS server for that domain", self.dns_server)
+        f.addRow(QtWidgets.QLabel("<small>Only names ending in the internal domain are looked "
+                                  "up through the VPN; everything else uses your normal DNS."
+                                  "</small>"))
+        bb = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Save | QtWidgets.QDialogButtonBox.Cancel)
+        bb.accepted.connect(self.accept)
         bb.rejected.connect(self.reject)
         f.addRow(bb)
-
-    def save(self) -> None:
-        from .http import fetch_fingerprint
-        fp = None
-        url = self.url.text().strip()
-        try:
-            if url.startswith("https://"):
-                fp = fetch_fingerprint(url)
-                if QtWidgets.QMessageBox.question(
-                        self, "Trust certificate?",
-                        f"The gateway's certificate fingerprint is:\n\n{fp}\n\nCompare it with the "
-                        "one your browser shows for the gateway. Trust it?") != QtWidgets.QMessageBox.Yes:
-                    return
-            self.m.add_gateway(self.name.text().strip(), self.vendor.currentData(), url,
-                               api_key=self.key.text().strip() or None,
-                               username=self.user.text().strip() or None,
-                               password=self.pw.text() or None, fingerprint=fp)
-        except Exception as e:  # noqa: BLE001
-            QtWidgets.QMessageBox.warning(self, "catflap", str(e))
-            return
-        self.accept()
-
-
-class AddSiteDialog(QtWidgets.QDialog if QtWidgets else object):
-    """Provision from a gateway (pick networks) or import a downloaded .conf."""
-
-    def __init__(self, parent, manager: Manager):
-        super().__init__(parent)
-        self.m = manager
-        self.setWindowTitle("Add site")
-        self.resize(520, 480)
-        lay = QtWidgets.QVBoxLayout(self)
-        tabs = QtWidgets.QTabWidget()
-        lay.addWidget(tabs)
-
-        # -- from gateway
-        w = QtWidgets.QWidget()
-        f = QtWidgets.QFormLayout(w)
-        self.gw = QtWidgets.QComboBox()
-        self.gw.addItems([n for n, g in manager.store.gateways().items() if g["vendor"] != "generic"])
-        self.site = QtWidgets.QComboBox()
-        self.nets = QtWidgets.QListWidget()
-        self.name = QtWidgets.QLineEdit()
-        self.endpoint = QtWidgets.QLineEdit()
-        self.endpoint.setPlaceholderText("DDNS hostname (optional; default: gateway's DDNS/WAN IP)")
-        load = QtWidgets.QPushButton("Load sites/networks")
-        load.clicked.connect(self.load_sites)
-        self.site.currentIndexChanged.connect(self.load_networks)
-        for label, x in (("Gateway", self.gw), ("", load), ("Site", self.site),
-                         ("Route these networks", self.nets), ("Profile name", self.name),
-                         ("Endpoint", self.endpoint)):
-            f.addRow(label, x)
-        tabs.addTab(w, "From gateway")
-
-        # -- from file
-        w2 = QtWidgets.QWidget()
-        f2 = QtWidgets.QFormLayout(w2)
-        self.file = QtWidgets.QLineEdit()
-        browse = QtWidgets.QPushButton("Browse…")
-        browse.clicked.connect(lambda: self.file.setText(
-            QtWidgets.QFileDialog.getOpenFileName(self, "WireGuard config", "", "WireGuard (*.conf)")[0]))
-        self.fvendor = QtWidgets.QComboBox()
-        for k, d in DRIVERS.items():
-            self.fvendor.addItem(d.display_name, k)
-        self.fname = QtWidgets.QLineEdit()
-        self.routes = QtWidgets.QLineEdit()
-        self.routes.setPlaceholderText("e.g. 192.168.10.0/24, 192.168.20.0/24")
-        self.fendpoint = QtWidgets.QLineEdit()
-        for label, x in (("File", self.file), ("", browse), ("Vendor", self.fvendor),
-                         ("Profile name", self.fname), ("Route these networks", self.routes),
-                         ("Endpoint (DDNS)", self.fendpoint)):
-            f2.addRow(label, x)
-        tabs.addTab(w2, "From .conf file")
-        self.tabs = tabs
-
-        bb = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
-        bb.accepted.connect(self.save)
-        bb.rejected.connect(self.reject)
-        lay.addWidget(bb)
-        self._sites: list = []
-
-    def load_sites(self) -> None:
-        gw = self.gw.currentText()
-        if not gw:
-            return
-        run_bg(lambda: self.m.list_sites(gw), self._got_sites)
-
-    def _got_sites(self, sites, err) -> None:
-        if err:
-            QtWidgets.QMessageBox.warning(self, "catflap", str(err))
-            return
-        self._sites = sites
-        self.site.clear()
-        self.site.addItems([s.name for s in sites])
-
-    def load_networks(self) -> None:
-        if not self._sites or self.site.currentIndex() < 0:
-            return
-        gw, sid = self.gw.currentText(), self._sites[self.site.currentIndex()].id
-        run_bg(lambda: self.m.list_networks(gw, sid)[1], self._got_nets)
-
-    def _got_nets(self, nets, err) -> None:
-        if err:
-            QtWidgets.QMessageBox.warning(self, "catflap", str(err))
-            return
-        self.nets.clear()
-        for n in nets:
-            it = QtWidgets.QListWidgetItem(f"{n.name}  {n.cidr}" + (f"  VLAN {n.vlan}" if n.vlan else ""))
-            it.setData(Qt.UserRole, n.cidr)
-            it.setFlags(it.flags() | Qt.ItemIsUserCheckable)
-            it.setCheckState(Qt.Unchecked)
-            self.nets.addItem(it)
-
-    def save(self) -> None:
-        if self.tabs.currentIndex() == 0:
-            cidrs = [self.nets.item(i).data(Qt.UserRole) for i in range(self.nets.count())
-                     if self.nets.item(i).checkState() == Qt.Checked]
-            site = self._sites[self.site.currentIndex()].id if self._sites else None
-            args = (self.gw.currentText(), self.name.text().strip(), cidrs)
-            fn = lambda: self.m.provision(*args, site=site, endpoint=self.endpoint.text().strip() or None)  # noqa: E731
-        else:
-            routes = [r.strip() for r in self.routes.text().split(",") if r.strip()]
-            fn = lambda: self.m.import_conf(self.file.text(), self.fname.text().strip(),  # noqa: E731
-                                            vendor=self.fvendor.currentData(), routes=routes or None,
-                                            endpoint=self.fendpoint.text().strip() or None)
-        self.setEnabled(False)
-        run_bg(fn, self._saved)
-
-    def _saved(self, res, err) -> None:
-        self.setEnabled(True)
-        if err:
-            QtWidgets.QMessageBox.warning(self, "catflap", str(err))
-            return
-        msgs = "\n".join(f"• {x}" for x in res.messages)
-        QtWidgets.QMessageBox.information(self, "catflap", f"Site '{res.profile.name}' added.\n\n{msgs}")
-        self.accept()
 
 
 # ============================================================ main window
 class MainWindow(QtWidgets.QMainWindow if QtWidgets else object):
-    COLS = ["", "Site", "Gateway", "Status", "Routes"]
-
     def __init__(self, app: "TrayApp"):
         super().__init__()
+        from .ui_views import AdvancedView, BasicView
         self.app = app
-        self.setWindowTitle(f"catflap {__version__}")
-        self.resize(760, 420)
-        central = QtWidgets.QWidget()
-        lay = QtWidgets.QVBoxLayout(central)
-        self.table = QtWidgets.QTableWidget(0, len(self.COLS))
-        self.table.setHorizontalHeaderLabels(self.COLS)
-        self.table.horizontalHeader().setStretchLastSection(True)
-        self.table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
-        self.table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
-        self.table.doubleClicked.connect(lambda _: self.toggle_selected())
-        lay.addWidget(self.table)
-        row = QtWidgets.QHBoxLayout()
-        for text, fn in (("Connect / Disconnect", self.toggle_selected), ("Colour…", self.pick_color),
-                         ("Add site…", self.add_site), ("Add gateway…", self.add_gateway),
-                         ("Remove site", self.remove_selected)):
-            b = QtWidgets.QPushButton(text)
-            b.clicked.connect(fn)
-            row.addWidget(b)
-        lay.addLayout(row)
-        self.setCentralWidget(central)
+        self.setWindowTitle("catflap")
+        self.setWindowIcon(QtGui.QIcon(make_pixmap(["#22C55E"], size=128)))
+        self.resize(820, 560)
+        self.stack = QtWidgets.QStackedWidget()
+        self.basic = BasicView()
+        self.advanced = AdvancedView()
+        self.stack.addWidget(self.basic)
+        self.stack.addWidget(self.advanced)
+        self.setCentralWidget(self.stack)
+        for v in (self.basic, self.advanced):
+            v.toggleRequested.connect(self.app.toggle)
+            v.addSiteRequested.connect(self.app.add_site)
+        self.basic.switchRequested.connect(lambda: self.set_mode("advanced"))
+        self.advanced.switchRequested.connect(lambda: self.set_mode("basic"))
+        self.advanced.addGatewayRequested.connect(self.app.add_gateway)
+        self.advanced.action.connect(self.on_action)
 
         mb = self.menuBar()
         fm = mb.addMenu("&File")
-        fm.addAction("Export everything…", self.export)
-        fm.addAction("Import export file…", self.import_bundle)
+        fm.addAction("Add a site…", self.app.add_site)
+        fm.addAction("Add a gateway…", self.app.add_gateway)
+        fm.addSeparator()
+        fm.addAction("Export everything (to move to another computer)…", self.export)
+        fm.addAction("Import from another computer…", self.import_bundle)
         fm.addSeparator()
         fm.addAction("Hide to tray", self.hide)
         fm.addAction("Quit", self.app.quit)
+        vm = mb.addMenu("&View")
+        grp = QtGui.QActionGroup(self)
+        self.a_basic = vm.addAction("Basic")
+        self.a_adv = vm.addAction("Advanced")
+        for a, mode in ((self.a_basic, "basic"), (self.a_adv, "advanced")):
+            a.setCheckable(True)
+            grp.addAction(a)
+            a.triggered.connect(lambda _=False, mo=mode: self.set_mode(mo))
         sm = mb.addMenu("&Settings")
-        self.a_autostart = sm.addAction("Start at login")
+        self.a_autostart = sm.addAction("Start catflap when I log in")
         self.a_autostart.setCheckable(True)
         self.a_autostart.setChecked(autostart.is_enabled())
         self.a_autostart.toggled.connect(self.set_autostart)
@@ -368,81 +112,115 @@ class MainWindow(QtWidgets.QMainWindow if QtWidgets else object):
         self.a_updates.setCheckable(True)
         self.a_updates.setChecked(self.app.settings.get("update_check", True))
         self.a_updates.toggled.connect(lambda v: self.app.set_setting("update_check", v))
-        sm.addAction("Reset close-button choice", lambda: self.app.set_setting("close_behavior", "ask"))
+        sm.addAction("Ask again what the close button does",
+                     lambda: self.app.set_setting("close_behavior", "ask"))
         hm = mb.addMenu("&Help")
+        hm.addAction("Setup guide…", self.app.first_run)
         hm.addAction("Check for updates…", lambda: self.app.check_updates(interactive=True))
         hm.addAction("About catflap", self.about)
+        self.set_mode(self.app.settings.get("ui_mode", "basic"), save=False)
 
-    # -- table
-    def refresh(self, profiles: dict[str, Profile], status: dict[str, Any], errors: dict[str, str]) -> None:
-        sel = self.selected()
-        self.table.setRowCount(0)
-        for name, p in sorted(profiles.items(), key=lambda kv: (kv[1].gateway or "", kv[0])):
-            st = status.get(name)
-            active = bool(st and st.active)
-            r = self.table.rowCount()
-            self.table.insertRow(r)
-            sw = QtWidgets.QTableWidgetItem()
-            sw.setIcon(dot_icon(p.color or GREY, active))
-            self.table.setItem(r, 0, sw)
-            self.table.setItem(r, 1, QtWidgets.QTableWidgetItem(name))
-            self.table.setItem(r, 2, QtWidgets.QTableWidgetItem(f"{p.gateway or 'imported'} ({p.vendor})"))
-            self.table.setItem(r, 3, QtWidgets.QTableWidgetItem(self.app.status_text(p, st, errors.get(name))))
-            self.table.setItem(r, 4, QtWidgets.QTableWidgetItem(", ".join(p.routes)))
-            if name == sel:
-                self.table.selectRow(r)
-        self.table.resizeColumnsToContents()
+    # -- view
+    def set_mode(self, mode: str, save: bool = True) -> None:
+        mode = "advanced" if mode == "advanced" else "basic"
+        self.stack.setCurrentWidget(self.advanced if mode == "advanced" else self.basic)
+        (self.a_adv if mode == "advanced" else self.a_basic).setChecked(True)
+        if save:
+            self.app.set_setting("ui_mode", mode)
+        self.refresh()
 
-    def selected(self) -> str | None:
-        rows = self.table.selectionModel().selectedRows() if self.table.selectionModel() else []
-        return self.table.item(rows[0].row(), 1).text() if rows else None
+    def refresh(self) -> None:
+        a = self.app
+        self.stack.currentWidget().update_data(a.profiles, a.status, a.errors, a.busy,
+                                               gateways=a.m.store.gateways(), checks=a.checks)
 
-    def toggle_selected(self) -> None:
-        n = self.selected()
-        if n:
-            self.app.toggle(n)
+    # -- advanced actions
+    def on_action(self, act: str, name: str) -> None:
+        a, m = self.app, self.app.m
+        try:
+            if act == "check":
+                a.checks[name] = run_blocking(self, "Running checks…", lambda: m.preflight(name))
+                self.refresh()
+            elif act == "color":
+                p = m.store.profile(name)
+                c = QtWidgets.QColorDialog.getColor(QtGui.QColor(p.color or GREY), self,
+                                                    f"Colour for {p.display}")
+                if c.isValid():
+                    m.update_profile(name, color=c.name())
+                    a.poll()
+            elif act == "edit":
+                self.edit_site(name)
+            elif act == "apply":
+                run_blocking(self, "Re-applying safe settings…", lambda: m.apply(name))
+                QtWidgets.QMessageBox.information(self, "catflap", "Settings re-applied.")
+            elif act == "remove":
+                self.remove_site(name)
+            elif act == "gw-key":
+                key, ok = QtWidgets.QInputDialog.getText(self, "Change API key",
+                                                         f"New API key for '{name}':",
+                                                         QtWidgets.QLineEdit.Password)
+                if ok and key.strip():
+                    m.set_gateway_secret(name, "api_key", key.strip())
+                    QtWidgets.QMessageBox.information(self, "catflap", "API key updated.")
+            elif act == "gw-remove":
+                if QtWidgets.QMessageBox.question(
+                        self, "Remove gateway", f"Remove gateway '{name}' and its saved API key "
+                        "from this computer?") == QtWidgets.QMessageBox.Yes:
+                    m.remove_gateway(name)
+                    a.poll()
+        except Exception as e:  # noqa: BLE001
+            QtWidgets.QMessageBox.warning(self, "catflap", friendly_error(e))
 
-    def pick_color(self) -> None:
-        n = self.selected()
-        if not n:
+    def edit_site(self, name: str) -> None:
+        m = self.app.m
+        p = m.store.profile(name)
+        dlg = EditSiteDialog(self, p)
+        if not self.app.run_dialog(dlg):
             return
-        p = self.app.m.store.profile(n)
-        c = QtWidgets.QColorDialog.getColor(QtGui.QColor(p.color or GREY), self, f"Colour for {n}")
-        if c.isValid():
-            self.app.m.update_profile(n, color=c.name())
-            self.app.poll()
+        routes = [r.strip() for r in dlg.routes.text().split(",") if r.strip()]
+        dom = dlg.dns_domain.text().strip()
+        servers = [s.strip() for s in dlg.dns_server.text().split(",") if s.strip()]
+        endpoint = dlg.endpoint.text().strip()
+        kw: dict[str, Any] = {"label": dlg.label.text().strip() or p.display}
+        if endpoint and endpoint != p.endpoint_host:
+            kw["endpoint"] = endpoint
+        if routes != p.routes:
+            kw["routes"] = routes
+        if dom != (p.dns_domain or "") or servers != p.dns_servers:
+            if dom:
+                kw.update(dns_domain=dom, dns_servers=servers or None)
+            else:
+                kw["clear_dns"] = True
+        try:
+            run_blocking(self, "Saving…", lambda: m.update_profile(name, **kw))
+        except Exception as e:  # noqa: BLE001
+            QtWidgets.QMessageBox.warning(self, "catflap", friendly_error(e))
+        self.app.poll()
 
-    def remove_selected(self) -> None:
-        n = self.selected()
-        if not n:
-            return
-        p = self.app.m.store.profile(n)
+    def remove_site(self, name: str) -> None:
+        m = self.app.m
+        p = m.store.profile(name)
         box = QtWidgets.QMessageBox(self)
         box.setWindowTitle("Remove site")
-        box.setText(f"Remove '{n}' from this PC?")
+        box.setText(f"Remove <b>{p.display}</b> from this computer?")
         revoke = None
         if p.gateway and p.client_id:
-            revoke = box.addButton("Remove and revoke on gateway", QtWidgets.QMessageBox.DestructiveRole)
-        local = box.addButton("Remove from this PC only", QtWidgets.QMessageBox.AcceptRole)
+            box.setInformativeText("You can also delete this computer's access on the router, so "
+                                   "the key on this computer stops working.")
+            revoke = box.addButton("Remove and delete on router", QtWidgets.QMessageBox.DestructiveRole)
+        local = box.addButton("Remove from this computer", QtWidgets.QMessageBox.AcceptRole)
         box.addButton(QtWidgets.QMessageBox.Cancel)
         box.exec()
         if box.clickedButton() not in (revoke, local):
             return
         do_revoke = box.clickedButton() is revoke
-        run_bg(lambda: self.app.m.remove(n, revoke=do_revoke), lambda r, e: self._done(r, e))
-
-    def _done(self, res, err) -> None:
-        if err:
-            QtWidgets.QMessageBox.warning(self, "catflap", str(err))
+        try:
+            run_blocking(self, "Removing…", lambda: m.remove(name, revoke=do_revoke))
+        except Exception as e:  # noqa: BLE001
+            QtWidgets.QMessageBox.warning(self, "catflap", friendly_error(e))
         self.app.poll()
 
-    def add_site(self) -> None:
-        if AddSiteDialog(self, self.app.m).exec():
-            self.app.poll()
-
-    def add_gateway(self) -> None:
-        AddGatewayDialog(self, self.app.m).exec()
-
+    # -- settings / files
     def set_autostart(self, v: bool) -> None:
         try:
             autostart.set_enabled(v)
@@ -450,46 +228,58 @@ class MainWindow(QtWidgets.QMainWindow if QtWidgets else object):
             QtWidgets.QMessageBox.warning(self, "catflap", str(e))
 
     def _ask_pass(self, title: str, confirm: bool) -> str | None:
-        pw, ok = QtWidgets.QInputDialog.getText(self, title, "Passphrase (min. 8 characters):",
-                                                QtWidgets.QLineEdit.Password)
+        pw, ok = QtWidgets.QInputDialog.getText(
+            self, title, "Passphrase (at least 8 characters). You'll need it on the other "
+                         "computer:", QtWidgets.QLineEdit.Password)
         if not ok:
             return None
         if confirm:
-            again, ok = QtWidgets.QInputDialog.getText(self, title, "Repeat passphrase:",
+            again, ok = QtWidgets.QInputDialog.getText(self, title, "Type it again:",
                                                        QtWidgets.QLineEdit.Password)
             if not ok or again != pw:
-                QtWidgets.QMessageBox.warning(self, "catflap", "Passphrases do not match.")
+                QtWidgets.QMessageBox.warning(self, "catflap", "The passphrases don't match.")
                 return None
         return pw
 
     def export(self) -> None:
-        path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Export catflap", "catflap-export.json")
+        QtWidgets.QMessageBox.information(
+            self, "Export everything",
+            "This saves your routers, API keys, sites and their keys into one file, locked "
+            "with a passphrase, so you can set up another computer quickly.\n\n"
+            "Don't use the same site on both computers at the same time; for a second "
+            "computer it's best to add the site again there.")
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self, "Export catflap", os.path.expanduser("~/Downloads/catflap-export.json"))
         if not path:
             return
-        pw = self._ask_pass("Encrypt export", confirm=True)
+        pw = self._ask_pass("Lock the export", confirm=True)
         if pw is None:
             return
         try:
-            import os
             text = self.app.m.export(pw)
             fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
             with os.fdopen(fd, "w") as f:
                 f.write(text)
-            QtWidgets.QMessageBox.information(self, "catflap", f"Exported (encrypted) to {path}.")
+            QtWidgets.QMessageBox.information(self, "catflap", f"Saved to {path}.")
         except Exception as e:  # noqa: BLE001
-            QtWidgets.QMessageBox.warning(self, "catflap", str(e))
+            QtWidgets.QMessageBox.warning(self, "catflap", friendly_error(e))
 
     def import_bundle(self) -> None:
         from .bundle import is_encrypted
-        path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Import catflap export", "", "catflap export (*.json)")
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self, "Import catflap export", os.path.expanduser("~/Downloads"),
+            "catflap export (*.json);;All files (*)")
         if not path:
             return
-        text = open(path, encoding="utf-8").read()
-        pw = self._ask_pass("Decrypt export", confirm=False) if is_encrypted(text) else None
-        run_bg(lambda: self.app.m.import_bundle(text, pw),
-               lambda r, e: (QtWidgets.QMessageBox.warning(self, "catflap", str(e)) if e else
-                             QtWidgets.QMessageBox.information(self, "catflap", "\n".join(r)),
-                             self.app.poll()))
+        try:
+            with open(path, encoding="utf-8") as f:
+                text = f.read()
+            pw = self._ask_pass("Unlock the export", confirm=False) if is_encrypted(text) else None
+            msgs = run_blocking(self, "Importing…", lambda: self.app.m.import_bundle(text, pw))
+            QtWidgets.QMessageBox.information(self, "catflap", "\n".join(msgs))
+        except Exception as e:  # noqa: BLE001
+            QtWidgets.QMessageBox.warning(self, "catflap", friendly_error(e))
+        self.app.poll()
 
     def about(self) -> None:
         info = update.detect_install()
@@ -500,6 +290,7 @@ class MainWindow(QtWidgets.QMainWindow if QtWidgets else object):
             f"Licensed under the Apache License 2.0; see NOTICE.<br>"
             f"<a href='https://github.com/{update.REPO}'>github.com/{update.REPO}</a>")
 
+    # -- window behaviour
     def closeEvent(self, ev) -> None:  # noqa: N802 (Qt API)
         if self.app.quitting:
             ev.accept()
@@ -508,8 +299,8 @@ class MainWindow(QtWidgets.QMainWindow if QtWidgets else object):
         if behavior == "ask":
             box = QtWidgets.QMessageBox(self)
             box.setWindowTitle("Close catflap?")
-            box.setText("Keep catflap running in the system tray, or quit completely?\n\n"
-                        "Connected tunnels stay up either way.")
+            box.setText("Keep catflap running in the system tray, or quit completely?")
+            box.setInformativeText("Connected sites stay connected either way.")
             tray_btn = box.addButton("Keep running in tray", QtWidgets.QMessageBox.AcceptRole)
             quit_btn = box.addButton("Quit catflap", QtWidgets.QMessageBox.DestructiveRole)
             box.addButton(QtWidgets.QMessageBox.Cancel)
@@ -550,10 +341,12 @@ class TrayApp(QtCore.QObject if QtCore else object):
         self.m = manager or Manager()
         self.settings = self.m.store.settings()
         self.quitting = False
-        self.profiles: dict[str, Profile] = {}
+        self.paused = 0
+        self.profiles: dict[str, Profile] = self.m.store.profiles()
         self.status: dict[str, Any] = {}
         self.errors: dict[str, str] = {}
         self.busy: set[str] = set()
+        self.checks: dict[str, list] = {}
         self.update_status: update.UpdateStatus | None = None
 
         self.tray = QtWidgets.QSystemTrayIcon(make_icon([]), self)
@@ -566,6 +359,7 @@ class TrayApp(QtCore.QObject if QtCore else object):
         self.timer = QtCore.QTimer(self)
         self.timer.timeout.connect(self.poll)
         self.timer.start(self.POLL_MS)
+        self._render()
         self.poll()
         if self.settings.get("update_check", True):
             QtCore.QTimer.singleShot(3000, lambda: self.check_updates(interactive=False))
@@ -575,73 +369,76 @@ class TrayApp(QtCore.QObject if QtCore else object):
         self.settings[key] = value
         self.m.store.save()
 
-    # -- status
-    @staticmethod
-    def status_text(p: Profile, st: Any, err: str | None) -> str:
-        if st is not None and st.active:
-            if st.last_handshake:
-                return f"connected (handshake {int(time.time() - st.last_handshake)}s ago)"
-            return "connected"
-        if err:
-            return f"error: {err.splitlines()[0][:80]}"
-        return "disconnected"
+    # -- dialogs pause polling so the store isn't reloaded under them
+    def run_dialog(self, dlg) -> bool:
+        self.paused += 1
+        try:
+            return bool(dlg.exec())
+        finally:
+            self.paused -= 1
+            self.poll()
 
+    # -- polling
     def poll(self) -> None:
-        root = self.m.store.root
+        if self.paused:
+            return
+        m = self.m
 
         def work():
-            store = Store(root)  # fresh read: the CLI may have changed things
-            profiles = store.profiles()
+            m.store.reload()   # the CLI may have changed things
+            profiles = m.store.profiles()
             st = {}
             for n, p in profiles.items():
                 try:
-                    st[n] = self.m.backend.status(p)
+                    st[n] = m.backend.status(p)
                 except Exception:  # noqa: BLE001
                     st[n] = None
-            return store, profiles, st
+            return profiles, st
         run_bg(work, self._polled)
 
     def _polled(self, res, err) -> None:
         if err or res is None:
             return
-        store, self.profiles, self.status = res
-        self.m.store = store
-        self.settings = store.settings()
+        self.profiles, self.status = res
         self._render()
 
     def _render(self) -> None:
-        active = [n for n, s in self.status.items() if s and s.active]
-        colors = [self.profiles[n].color or "#2E9E44" for n in sorted(active)]
+        active = [n for n, s in self.status.items() if s and s.active and n in self.profiles]
+        colors = [self.profiles[n].color or "#22C55E" for n in sorted(active)]
         self.tray.setIcon(make_icon(colors, error=bool(self.errors) and not active))
-        self.tray.setToolTip("catflap: " + (", ".join(sorted(active)) + " connected" if active
+        names = [self.profiles[n].display for n in sorted(active)]
+        self.tray.setToolTip("catflap: " + (", ".join(names) + " connected" if names
                                              else "not connected"))
         self._build_menu()
         if self.window.isVisible():
-            self.window.refresh(self.profiles, self.status, self.errors)
+            self.window.refresh()
 
     def _build_menu(self) -> None:
         m = self.menu
         m.clear()
         groups: dict[str, list[Profile]] = {}
         for p in self.profiles.values():
-            groups.setdefault(f"{p.gateway or 'Imported'} · {DRIVERS[p.vendor].display_name if p.vendor in DRIVERS else p.vendor}", []).append(p)
-        if not groups:
-            m.addAction("No sites yet — open catflap to add one").setEnabled(False)
+            vendor = DRIVERS[p.vendor].display_name if p.vendor in DRIVERS else p.vendor
+            groups.setdefault(f"{p.gateway or 'Imported'} · {vendor}", []).append(p)
         for g in sorted(groups):
-            m.addSection(g)
-            for p in sorted(groups[g], key=lambda x: x.name):
+            if len(groups) > 1:
+                m.addSection(g)
+            for p in sorted(groups[g], key=lambda x: x.display.lower()):
                 st = self.status.get(p.name)
                 active = bool(st and st.active)
-                label = f"{p.name} — " + ("working…" if p.name in self.busy else
-                                          self.status_text(p, st, self.errors.get(p.name)))
-                a = m.addAction(dot_icon(p.color or GREY, active), label)
+                text = status_text(st, self.errors.get(p.name), p.name in self.busy)[0]
+                verb = "Disconnect" if active else "Connect"
+                a = m.addAction(dot_icon(p.color or GREY, active), f"{p.display}: {text}  ({verb})")
                 a.setEnabled(p.name not in self.busy)
                 a.triggered.connect(lambda _=False, n=p.name: self.toggle(n))
-        m.addSeparator()
+        if groups:
+            m.addSeparator()
+        m.addAction("Add a site…", self.add_site)
+        m.addAction("Open catflap", self.show_window)
         if self.update_status and self.update_status.available:
-            m.addAction(f"Update to {self.update_status.latest.version} available…",
+            m.addAction(f"Update to {self.update_status.latest.version}…",
                         lambda: self.check_updates(interactive=True))
-        m.addAction("Open catflap…", self.show_window)
+        m.addSeparator()
         m.addAction("Quit", self.quit)
 
     # -- actions
@@ -653,10 +450,42 @@ class TrayApp(QtCore.QObject if QtCore else object):
                 self.show_window()
 
     def show_window(self) -> None:
-        self.window.refresh(self.profiles, self.status, self.errors)
+        self.window.refresh()
         self.window.showNormal()
         self.window.raise_()
         self.window.activateWindow()
+
+    def first_run(self) -> None:
+        from .ui_wizards import FirstRunWizard
+        self.show_window()
+        wiz = FirstRunWizard(self.window)
+        ok = self.run_dialog(wiz)
+        self.settings["first_run_done"] = True
+        if ok:
+            self.settings["ui_mode"] = wiz.mode
+        self.m.store.save()
+        self.window.set_mode(self.settings.get("ui_mode", "basic"), save=False)
+        if ok and wiz.add_now.isChecked():
+            self.add_site()
+
+    def add_site(self) -> None:
+        from .ui_wizards import SiteWizard
+        self.show_window()
+        wiz = SiteWizard(self.m, self.window)
+        if self.run_dialog(wiz) and wiz.result is not None:
+            name = wiz.result.profile.name
+            self.profiles = self.m.store.profiles()
+            self._render()
+            if wiz.connect_after:
+                self.toggle(name)
+
+    def add_gateway(self) -> None:
+        from .ui_wizards import GatewayWizard
+        self.show_window()
+        wiz = GatewayWizard(self.m, self.window)
+        if self.run_dialog(wiz) and wiz.gateway:
+            QtWidgets.QMessageBox.information(
+                self.window, "catflap", "Gateway added. Use 'Add a site' to choose what to reach.")
 
     def toggle(self, name: str) -> None:
         if name in self.busy:
@@ -671,17 +500,22 @@ class TrayApp(QtCore.QObject if QtCore else object):
 
     def _toggled(self, name: str, res, err, connecting: bool) -> None:
         self.busy.discard(name)
+        p = self.profiles.get(name)
+        label = p.display if p else name
         if err:
-            self.errors[name] = str(err)
-            self.tray.showMessage(f"catflap: {name}", str(err), QtWidgets.QSystemTrayIcon.Critical)
+            self.errors[name] = friendly_error(err)
+            self.tray.showMessage(f"catflap: {label}", self.errors[name], QtWidgets.QSystemTrayIcon.Critical)
         elif connecting and res is not None and not res.ok:
-            bad = [f.message for f in res.findings if f.level == "error"]
+            bad = [f.message for f in res.findings if f.level == checks.ERROR]
             self.errors[name] = bad[0] if bad else "failed"
-            self.tray.showMessage(f"catflap: {name} not connected", "\n".join(bad)[:400],
+            self.checks[name] = res.findings
+            self.tray.showMessage(f"catflap: couldn't connect to {label}", "\n".join(bad)[:400],
                                   QtWidgets.QSystemTrayIcon.Warning)
         else:
             self.errors.pop(name, None)
-            self.tray.showMessage("catflap", f"{name} {'connected' if connecting else 'disconnected'}",
+            if res is not None:
+                self.checks[name] = res.findings
+            self.tray.showMessage("catflap", f"{label} {'connected' if connecting else 'disconnected'}",
                                   QtWidgets.QSystemTrayIcon.Information, 3000)
         self.poll()
 
@@ -709,7 +543,7 @@ class TrayApp(QtCore.QObject if QtCore else object):
                 f"Installed via: {st.install.method}\n\nTo update manually:\n{steps}")
         if st.install.automatic:
             if QtWidgets.QMessageBox.question(self.window, "Update catflap",
-                                              text + "\n\nUpdate automatically now?") == QtWidgets.QMessageBox.Yes:
+                                              text + "\n\nUpdate now?") == QtWidgets.QMessageBox.Yes:
                 run_bg(lambda: update.apply_update(st), self._updated)
         else:
             QtWidgets.QMessageBox.information(self.window, "Update catflap", text)
@@ -728,12 +562,12 @@ def main(argv: list[str] | None = None) -> int:
     require_qt()
     argv = sys.argv[1:] if argv is None else argv
     QtWidgets.QApplication.setApplicationName("catflap")
-    QtWidgets.QApplication.setDesktopFileName("catflap")
+    QtWidgets.QApplication.setDesktopFileName(os.environ.get("FLATPAK_ID", "catflap"))
     qapp = QtWidgets.QApplication.instance() or QtWidgets.QApplication([sys.argv[0]])
     qapp.setQuitOnLastWindowClosed(False)
+    qapp.setWindowIcon(QtGui.QIcon(make_pixmap(["#22C55E"], size=128)))
     if not QtWidgets.QSystemTrayIcon.isSystemTrayAvailable():
         print("catflap: no system tray available; showing the window only", file=sys.stderr)
-    qapp.setWindowIcon(make_icon(["#22C55E"]))
     app = TrayApp(qapp)
     # Quit cleanly on logout/SIGTERM/Ctrl+C: Python only handles signals while
     # it runs, so wake the interpreter regularly.
@@ -744,7 +578,9 @@ def main(argv: list[str] | None = None) -> int:
     wake.timeout.connect(lambda: None)
     wake.start(500)
     app.tray.show()
-    if "--minimized" not in argv:
+    if not app.settings.get("first_run_done"):
+        QtCore.QTimer.singleShot(0, app.first_run)
+    elif "--minimized" not in argv:
         app.show_window()
     return qapp.exec()
 

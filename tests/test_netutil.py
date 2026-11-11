@@ -43,3 +43,8 @@ def test_cgnat_and_private():
 
 def test_suggest_subnet():
     assert netutil.suggest_vpn_subnet(3) == "10.250.3.0/28"
+
+
+def test_slug_allows_long_names():
+    assert netutil.slug("Ponsys Office (Main Building)") == "ponsys-office-main-building"
+    assert netutil.slug("Mum's House") == "mum-s-house"

@@ -30,6 +30,12 @@ def sanitize_ifname(name: str, prefix: str = IFNAME_PREFIX) -> str:
     return out
 
 
+def slug(text: str, max_len: int = 40) -> str:
+    """CLI-safe name: lowercase letters, digits, '-' and '_' ("Mum's House" -> "mum-s-house")."""
+    out = re.sub(r"[^a-z0-9_-]+", "-", text.lower()).strip("-_")
+    return re.sub(r"-{2,}", "-", out)[:max_len].strip("-_")
+
+
 def unique_ifname(name: str, taken: Iterable[str]) -> str:
     taken = set(taken)
     base = sanitize_ifname(name)
