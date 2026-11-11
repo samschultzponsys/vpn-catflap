@@ -118,9 +118,13 @@ def cmd_update(m: Manager, a, out: Out) -> int:
     if not a.yes and sys.stdin.isatty():
         if input("Update now? [y/N] ").strip().lower() != "y":
             return EXIT_OK
-    done, msg = update.apply_update(st)
-    out.say(msg)
-    return EXIT_OK if done else EXIT_ERR
+    res = update.apply_update(st)
+    out.say(res.message)
+    for c in res.commands:
+        out.say(f"  {c}")
+    if res.done and res.restart:
+        out.say("Restart catflap to use the new version (quit it from the tray and start it again).")
+    return EXIT_OK if res.done else EXIT_ERR
 
 
 def cmd_gateway_add(m: Manager, a, out: Out) -> int:

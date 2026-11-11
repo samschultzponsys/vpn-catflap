@@ -354,6 +354,7 @@ class TrayApp(QtCore.QObject if QtCore else object):
         self.menu = QtWidgets.QMenu()
         self.tray.setContextMenu(self.menu)
         self.tray.activated.connect(self._activated)
+        self.tray.messageClicked.connect(self._message_clicked)
         self.window = MainWindow(self)
 
         self.timer = QtCore.QTimer(self)
@@ -449,6 +450,12 @@ class TrayApp(QtCore.QObject if QtCore else object):
             else:
                 self.show_window()
 
+    def _message_clicked(self) -> None:
+        if self.update_status and self.update_status.available:
+            self.check_updates(interactive=True)
+        else:
+            self.show_window()
+
     def show_window(self) -> None:
         self.window.refresh()
         self.window.showNormal()
@@ -538,19 +545,30 @@ class TrayApp(QtCore.QObject if QtCore else object):
             self.tray.showMessage("catflap update", f"Version {st.latest.version} is available.",
                                   QtWidgets.QSystemTrayIcon.Information)
             return
-        steps = "\n".join(st.instructions)
-        text = (f"catflap {st.latest.version} is available (you have {st.current}).\n"
-                f"Installed via: {st.install.method}\n\nTo update manually:\n{steps}")
-        if st.install.automatic:
-            if QtWidgets.QMessageBox.question(self.window, "Update catflap",
-                                              text + "\n\nUpdate now?") == QtWidgets.QMessageBox.Yes:
-                run_bg(lambda: update.apply_update(st), self._updated)
-        else:
-            QtWidgets.QMessageBox.information(self.window, "Update catflap", text)
+        from .ui_update import UpdateDialog
+        dlg = UpdateDialog(st, self.window, self.settings)
+        self.run_dialog(dlg)
+        self.m.store.save()
+        if dlg.restart_requested:
+            try:
+                update.restart(st.install)
+            except OSError as e:
+                QtWidgets.QMessageBox.warning(self.window, "catflap",
+                                              f"Couldn't restart automatically ({e}). Start catflap "
+                                              "again from your application menu.")
+            self.quit()
 
-    def _updated(self, res, err) -> None:
-        msg = str(err) if err else res[1]
-        QtWidgets.QMessageBox.information(self.window, "catflap", msg)
+    def show_after_restart(self) -> None:
+        from .ui_update import after_restart_message
+        msg = after_restart_message(self.settings)
+        self.m.store.save()
+        if not msg:
+            return
+        title, text = msg
+        if title.startswith("Update not"):
+            QtWidgets.QMessageBox.information(self.window, title, text)
+        else:
+            self.tray.showMessage(title, text, QtWidgets.QSystemTrayIcon.Information, 6000)
 
     def quit(self) -> None:
         self.quitting = True
@@ -578,6 +596,7 @@ def main(argv: list[str] | None = None) -> int:
     wake.timeout.connect(lambda: None)
     wake.start(500)
     app.tray.show()
+    QtCore.QTimer.singleShot(500, app.show_after_restart)
     if not app.settings.get("first_run_done"):
         QtCore.QTimer.singleShot(0, app.first_run)
     elif "--minimized" not in argv:

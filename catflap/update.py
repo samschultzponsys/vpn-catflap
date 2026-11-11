@@ -196,34 +196,85 @@ def _download(url: str, dest_dir: Path) -> Path:
     return dest
 
 
-def apply_update(st: UpdateStatus, run: Callable[[list[str]], int] | None = None) -> tuple[bool, str]:
-    """Try to update automatically. Returns (done, message)."""
+@dataclass
+class UpdateResult:
+    done: bool                       # the new version is installed
+    message: str
+    restart: bool = False            # restart catflap to run the new version
+    downloaded: Path | None = None   # a file the user still has to install (Flatpak)
+    commands: list[str] = field(default_factory=list)   # what's left to run, if anything
+
+    def __iter__(self):              # (done, message), for older callers
+        return iter((self.done, self.message))
+
+
+def downloads_dir() -> Path:
+    d = Path(os.environ.get("XDG_DOWNLOAD_DIR", Path.home() / "Downloads"))
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def flatpak_commands(st: UpdateStatus, bundle: Path | None = None) -> list[str]:
+    """The full, copy-pasteable commands to update a Flatpak install by hand."""
+    rel = st.latest
+    url = _asset(rel, ".flatpak") if rel else None
+    name = f"catflap-{rel.version}.flatpak" if rel else "catflap.flatpak"
+    path = str(bundle) if bundle else f"~/Downloads/{name}"
+    cmds = [] if bundle else [f"curl -L -o {path} {url or rel.url}"]
+    return cmds + [f"flatpak install --user -y {path}"]
+
+
+def restart_command(info: InstallInfo | None = None) -> list[str]:
+    """How to start a fresh catflap that runs the newly installed version."""
+    info = info or detect_install()
+    if info.method == "flatpak":
+        # The Flatpak portal starts the *latest installed* version of this app
+        # in a new sandbox; no extra permissions needed.
+        return ["flatpak-spawn", "--latest-version", "catflap-tray"]
+    if info.method == "windows":
+        return [sys.executable, "tray"]
+    exe = shutil.which("catflap-tray")
+    return [exe] if exe else [sys.executable, "-m", "catflap", "tray"]
+
+
+def restart(info: InstallInfo | None = None) -> None:
+    """Start the new catflap; the caller then quits this one."""
+    subprocess.Popen(restart_command(info), start_new_session=True,
+                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def apply_update(st: UpdateStatus, run: Callable[[list[str]], int] | None = None) -> UpdateResult:
+    """Update automatically where possible; otherwise say exactly what's left to do."""
     if not st.available or not st.latest:
-        return False, "Already up to date."
+        return UpdateResult(False, "Already up to date.")
     run = run or (lambda c: subprocess.call(c))
     m, rel = st.install.method, st.latest
+    manual = instructions(st.install, rel)
     if m == "flatpak":
         url = _asset(rel, ".flatpak")
         if not url:
-            return False, "This release has no Flatpak bundle; see " + rel.url
-        dl = Path(os.environ.get("XDG_DOWNLOAD_DIR", Path.home() / "Downloads"))
-        dl.mkdir(parents=True, exist_ok=True)
-        bundle = _download(url, dl)
-        cmd = ["flatpak", "install", "--user", "-y", str(bundle)]
+            return UpdateResult(False, "This release has no Flatpak file; download it from "
+                                + rel.url, commands=manual)
+        bundle = _download(url, downloads_dir())
+        cmds = flatpak_commands(st, bundle)
         if not host_commands_allowed(run):
-            return False, ("Downloaded the update to " + str(bundle) + ". Install it with:\n  "
-                           + " ".join(cmd) + "\n(To let catflap do this itself next time: "
-                           f"flatpak override --user --talk-name=org.freedesktop.Flatpak {st.install.detail or FLATPAK_ID})")
-        rc = run(["flatpak-spawn", "--host", *cmd])
-    elif m == "rpm":
+            return UpdateResult(False, f"Downloaded catflap {rel.version} to {bundle}. Install it "
+                                "with the command below, then restart catflap.",
+                                restart=True, downloaded=bundle, commands=cmds)
+        rc = run(["flatpak-spawn", "--host", "flatpak", "install", "--user", "-y", str(bundle)])
+        if rc != 0:
+            return UpdateResult(False, f"Installing the update failed (exit {rc}). Run it yourself:",
+                                downloaded=bundle, commands=cmds)
+        return UpdateResult(True, f"catflap {rel.version} is installed.", restart=True)
+    if m == "rpm":
         url = _asset(rel, ".noarch.rpm")
         if not url:
-            return False, "This release has no RPM asset; see " + rel.url
+            return UpdateResult(False, "This release has no RPM; see " + rel.url, commands=manual)
         rc = run(["pkexec", "dnf", "install", "-y", url])
     elif m == "deb":
         url = _asset(rel, "_all.deb")
         if not url:
-            return False, "This release has no .deb asset; see " + rel.url
+            return UpdateResult(False, "This release has no .deb; see " + rel.url, commands=manual)
         with tempfile.TemporaryDirectory() as d:
             rc = run(["pkexec", "apt-get", "install", "-y", str(_download(url, Path(d)))])
     elif m in ("pip", "pipx"):
@@ -234,12 +285,13 @@ def apply_update(st: UpdateStatus, run: Callable[[list[str]], int] | None = None
     elif m == "windows":
         url = _asset(rel, ".exe")
         if not url:
-            return False, "This release has no Windows installer; see " + rel.url
+            return UpdateResult(False, "This release has no Windows installer; see " + rel.url)
         exe = _download(url, Path(tempfile.mkdtemp(prefix="catflap-update-")))
-        subprocess.Popen([str(exe)])  # installer replaces us; caller should exit
-        return True, "The installer has been started; catflap will close."
+        subprocess.Popen([str(exe)])  # the installer replaces us and restarts catflap
+        return UpdateResult(True, "The installer has been started; catflap will close.")
     else:
-        return False, "Installed from source. Update with:\n  " + "\n  ".join(instructions(st.install, rel))
+        return UpdateResult(False, "Installed from source. Update with:", commands=manual)
     if rc == 0:
-        return True, f"Updated to {rel.version}. Restart catflap to use it."
-    return False, f"Update command failed (exit {rc}). Manual steps:\n  " + "\n  ".join(instructions(st.install, rel))
+        return UpdateResult(True, f"catflap {rel.version} is installed.", restart=True)
+    return UpdateResult(False, f"The update command failed (exit {rc}). Run it yourself:",
+                        commands=manual)

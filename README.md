@@ -560,16 +560,35 @@ ever sees the public key.
 | Windows installer | downloads and runs the installer | download from the release page |
 | Source checkout | – | `git fetch --tags && git checkout v<version>` |
 
-**Flatpak updates.** A sandboxed app can't run `flatpak` on the host by itself.
-By default, **Help → Check for updates…** (or `catflap update`) downloads the new
-bundle to `~/Downloads` and shows the one command to run. To let catflap install
-it too, grant this once:
+**Updating from the app.** **Help → Check for updates…** (or clicking the
+"update available" notification) opens the update window. It shows:
+
+- what's new
+- the **exact commands** to update by hand, with **Copy commands** and **Open
+  download page** buttons
+- one button to update for you
+
+When the update is installed, **Restart catflap** closes the app and opens the
+new version. Connected sites stay connected. After the restart, catflap
+confirms the version it is now running, or tells you if the update wasn't
+installed yet.
+
+**Flatpak specifics.** A sandboxed app can't install updates on the host by
+itself, so **Download and install** downloads `catflap-<v>.flatpak` to
+`~/Downloads` and shows the one remaining command:
+
+```bash
+flatpak install --user -y ~/Downloads/catflap-<v>.flatpak
+```
+
+Run it, then click **Restart catflap**. The restart uses the Flatpak portal's
+"latest version" launch, so the reopened app is the new version. To let catflap
+run the install command itself, grant this once (it lets the app run commands
+on the host, so it's off by default):
 
 ```bash
 flatpak override --user --talk-name=org.freedesktop.Flatpak io.github.samschultzponsys.CatFlap
 ```
-
-That permission lets the app run commands on the host, so it is off by default.
 
 Maintainers: `scripts/bump_version.py` moves to the next version (with rollover)
 in every file. Then add a `CHANGELOG.md` entry and push to `main`: the release

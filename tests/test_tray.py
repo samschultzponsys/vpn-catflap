@@ -157,3 +157,34 @@ def test_gateway_wizard(qapp, manager, no_popups):
     w.login.key.setText("K2")
     assert w.login.validatePage()
     assert manager.store.gateway(w.gateway)["url"] == "https://10.0.0.1"
+
+
+def test_update_dialog_flatpak_manual_then_restart(qapp, monkeypatch, tmp_path):
+    from catflap import update, ui_update
+    rel = update.ReleaseInfo(version="9.9", url="https://x/releases/v9.9", notes="* new stuff",
+                             assets={"catflap-9.9.flatpak": "https://dl/catflap-9.9.flatpak"})
+    st = update.check({}, fetch=lambda: rel, install=update.InstallInfo("flatpak", "io.x.CatFlap", True))
+    settings = {}
+    d = ui_update.UpdateDialog(st, settings=settings)
+    assert "curl -L -o ~/Downloads/catflap-9.9.flatpak https://dl/catflap-9.9.flatpak" in d.cmds.toPlainText()
+    assert d.go.text() == "Download and install"
+    bundle = tmp_path / "catflap-9.9.flatpak"
+    monkeypatch.setattr(update, "apply_update", lambda s: update.UpdateResult(
+        False, "Downloaded", restart=True, downloaded=bundle,
+        commands=[f"flatpak install --user -y {bundle}"]))
+    d.do_update()
+    assert d.cmds.toPlainText() == f"flatpak install --user -y {bundle}"
+    assert not d.restart_btn.isHidden()
+    d.do_restart()
+    assert d.restart_requested and settings["pending_update"] == "9.9"
+
+
+def test_after_restart_messages(monkeypatch):
+    from catflap import ui_update
+    monkeypatch.setattr(ui_update, "__version__", "1.3")
+    s = {"last_run_version": "1.2"}
+    assert ui_update.after_restart_message(s)[0] == "catflap updated"
+    assert s["last_run_version"] == "1.3"
+    assert ui_update.after_restart_message(s) is None
+    s["pending_update"] = "1.4"
+    assert ui_update.after_restart_message(s)[0] == "Update not installed yet"

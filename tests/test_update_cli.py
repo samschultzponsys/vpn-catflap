@@ -67,15 +67,24 @@ def test_cli_up_failure_exit_code(manager, backend, capsys):
 def test_flatpak_update_downloads_bundle_and_explains(monkeypatch, tmp_path):
     rel = ReleaseInfo(version="9.9", url="u", assets={"catflap-9.9.flatpak": "https://dl/catflap-9.9.flatpak"})
     st = update.check({}, fetch=lambda: rel, install=InstallInfo("flatpak", "io.x.CatFlap", True))
-    assert st.instructions[-1] == "flatpak install --user -y ~/Downloads/catflap-9.9.flatpak"
+    # full copy-pasteable commands before anything is downloaded
+    assert update.flatpak_commands(st) == [
+        "curl -L -o ~/Downloads/catflap-9.9.flatpak https://dl/catflap-9.9.flatpak",
+        "flatpak install --user -y ~/Downloads/catflap-9.9.flatpak"]
     monkeypatch.setenv("XDG_DOWNLOAD_DIR", str(tmp_path))
     monkeypatch.setattr(update, "_download", lambda url, d: d / "catflap-9.9.flatpak")
     monkeypatch.setattr(update.shutil, "which", lambda n: "/usr/bin/flatpak-spawn")
     ran = []
-    # host commands not permitted -> download + instructions
-    ok, msg = update.apply_update(st, run=lambda c: ran.append(c) or 1)
-    assert not ok and "flatpak install --user -y" in msg and "flatpak override" in msg
+    # host commands not permitted -> downloaded, one command left, then restart
+    res = update.apply_update(st, run=lambda c: ran.append(c) or 1)
+    assert not res.done and res.restart and res.downloaded == tmp_path / "catflap-9.9.flatpak"
+    assert res.commands == [f"flatpak install --user -y {tmp_path}/catflap-9.9.flatpak"]
     # permitted -> installs on the host
     ran.clear()
-    ok, _ = update.apply_update(st, run=lambda c: ran.append(c) or 0)
-    assert ok and ran[-1][:3] == ["flatpak-spawn", "--host", "flatpak"]
+    res = update.apply_update(st, run=lambda c: ran.append(c) or 0)
+    assert res.done and res.restart and ran[-1][:3] == ["flatpak-spawn", "--host", "flatpak"]
+
+
+def test_restart_command_runs_latest_version():
+    assert update.restart_command(InstallInfo("flatpak")) == ["flatpak-spawn", "--latest-version", "catflap-tray"]
+    assert update.restart_command(InstallInfo("pip"))[-1] == "tray"

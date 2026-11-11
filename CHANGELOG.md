@@ -3,6 +3,16 @@
 Versions are `MAJOR.MINOR`; the minor number runs 0–9 and then rolls over
 (1.9 → 2.0). Every release is tagged `vMAJOR.MINOR`.
 
+## 0.3
+
+- New update window: what's new, the exact commands to update by hand (with
+  Copy commands and Open download page), and an Update / Download button.
+- catflap restarts itself into the new version after an update (Flatpak uses the
+  portal's latest-version launch), then confirms the version it's running, or
+  says if the update wasn't installed yet.
+- Clicking the "update available" notification opens the update window.
+- Four more icon options combining A's design with C's blue palette (O–R).
+
 ## 0.2
 
 - First-start setup guide: choose a **Basic** or **Advanced** look (with a live example

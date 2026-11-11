@@ -20,3 +20,7 @@ tray icon is drawn in code (`catflap/ui_common.py`) and uses option A's shape.
 | L | `l-tail-key.svg` | A sitting cat whose tail ends in a key |
 | M | `m-pixel.svg` | Pixel-art cat in a cat flap |
 | N | `n-signal-ears.svg` | Signal waves with cat ears |
+| O | `o-blue-peek.svg` | A in C's blue palette: white cat, light-blue frame |
+| P | `p-sky-cat.svg` | A in C's blues with a light-blue cat and a white frame |
+| Q | `q-tunnel-peek.svg` | C's tunnel arches as the cat flap, with A's cat peeking out |
+| R | `r-night-blue.svg` | A on navy with a blue-gradient cat |
