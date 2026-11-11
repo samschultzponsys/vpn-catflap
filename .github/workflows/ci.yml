@@ -1,27 +1,30 @@
+# Kept deliberately cheap on Actions minutes: one Linux job, only for main and
+# pull requests, skipped for docs-only changes, and superseded runs cancelled.
+# (Windows is tested once per release in release.yml: Windows minutes cost 2x.)
 name: ci
 on:
   push:
-    branches: ["**"]
+    branches: [main]
+    paths-ignore: ["**.md", "docs/**", "LICENSE", "NOTICE"]
   pull_request:
+    paths-ignore: ["**.md", "docs/**", "LICENSE", "NOTICE"]
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { os: ubuntu-latest, python: "3.11" }
-          - { os: ubuntu-latest, python: "3.13" }
-          - { os: windows-latest, python: "3.13" }
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python }}
-      - run: python -m pip install -e ".[test]"
+          python-version: "3.13"
+      - run: python -m pip install -q -e ".[test]"
       - run: python scripts/bump_version.py --check
       - run: python -m pytest -q

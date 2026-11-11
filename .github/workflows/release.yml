@@ -1,7 +1,9 @@
-# Runs only when a version tag (vMAJOR.MINOR) is pushed. Release assets: wheel,
-# sdist and noarch RPM (~100 KB each) plus a Flatpak bundle (~12 MB). To keep
-# storage low, Flatpak bundles are kept on the two newest releases only;
-# nothing is committed back and workflow artifacts expire after one day.
+# Runs only when a version tag (vMAJOR.MINOR) is pushed. Every asset carries the
+# version in its name: catflap-X.Y.tar.gz, catflap-X.Y-py3-none-any.whl,
+# catflap-X.Y-1.noarch.rpm, catflap-X.Y.flatpak (~12 MB). Release assets don't
+# count against Actions/Packages storage; the only Actions storage used is
+# workflow artifacts handed between jobs, which expire after one day. No
+# caches and no GitHub Packages are used.
 name: release
 on:
   push:
@@ -10,9 +12,14 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -29,9 +36,21 @@ jobs:
           path: dist/
           retention-days: 1
 
+  windows-tests:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python -m pip install -q -e ".[test]"
+      - run: python -m pytest -q
+
   rpm:
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     container: fedora:latest
     steps:
       - uses: actions/checkout@v4
@@ -43,7 +62,8 @@ jobs:
           dnf install -y rpm-build python3-devel pyproject-rpm-macros python3-pytest
           python3-setuptools python3-pip python3-wheel python3-packaging desktop-file-utils
           python3-keyring python3-cryptography
-      - run: rpmbuild -bb packaging/rpm/catflap.spec --define "_sourcedir $PWD/dist" --define "_rpmdir $PWD/rpm"
+      # dist tag left out so the file is simply catflap-X.Y-1.noarch.rpm
+      - run: rpmbuild -bb packaging/rpm/catflap.spec --define "_sourcedir $PWD/dist" --define "_rpmdir $PWD/rpm" --define "dist %{nil}"
       - uses: actions/upload-artifact@v4
         with:
           name: rpm
@@ -53,6 +73,7 @@ jobs:
   flatpak:
     needs: build
     runs-on: ubuntu-24.04
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - name: Install flatpak-builder, KDE SDK and PySide base app
@@ -75,8 +96,9 @@ jobs:
           retention-days: 1
 
   publish:
-    needs: [build, rpm, flatpak]
+    needs: [build, windows-tests, rpm, flatpak]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -89,12 +111,3 @@ jobs:
         run: |
           notes=$(awk -v v="## ${GITHUB_REF_NAME#v}" '$0==v{f=1;next} /^## /{f=0} f' CHANGELOG.md)
           gh release create "$GITHUB_REF_NAME" out/* --title "catflap ${GITHUB_REF_NAME#v}" --notes "${notes:-See CHANGELOG.md}"
-      - name: Keep Flatpak bundles on the two newest releases only
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          for tag in $(gh release list --limit 100 --json tagName --jq '.[2:][].tagName'); do
-            for asset in $(gh release view "$tag" --json assets --jq '.assets[].name | select(endswith(".flatpak"))'); do
-              gh release delete-asset "$tag" "$asset" -y
-            done
-          done

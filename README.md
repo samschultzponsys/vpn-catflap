@@ -78,11 +78,11 @@ flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/fl
 ```
 
 ```bash
-curl -L -o ~/Downloads/catflap.flatpak https://github.com/samschultzponsys/vpn-catflap/releases/download/v<version>/catflap-<version>.flatpak
+curl -L -o ~/Downloads/catflap-<version>.flatpak https://github.com/samschultzponsys/vpn-catflap/releases/download/v<version>/catflap-<version>.flatpak
 ```
 
 ```bash
-flatpak install --user -y ~/Downloads/catflap.flatpak
+flatpak install --user -y ~/Downloads/catflap-<version>.flatpak
 ```
 
 **Or build it yourself from this repository** (no release needed; about 1 GB of
@@ -147,14 +147,14 @@ sudo apt install network-manager python3-keyring python3-cryptography python3-py
 ```
 
 ```bash
-pipx install --system-site-packages https://github.com/samschultzponsys/vpn-catflap/releases/latest/download/catflap-<version>-py3-none-any.whl
+pipx install --system-site-packages https://github.com/samschultzponsys/vpn-catflap/releases/download/v<version>/catflap-<version>-py3-none-any.whl
 ```
 
 **Windows (under development):** install [WireGuard for Windows](https://www.wireguard.com/install/)
 and Python 3.11+, then:
 
 ```bash
-pip install "catflap[tray] @ https://github.com/samschultzponsys/vpn-catflap/releases/latest/download/catflap-<version>-py3-none-any.whl"
+pip install "catflap[tray] @ https://github.com/samschultzponsys/vpn-catflap/releases/download/v<version>/catflap-<version>-py3-none-any.whl"
 ```
 
 **From source:**
@@ -499,10 +499,20 @@ That permission lets the app run commands on the host, so it is off by default.
 
 Maintainers: `scripts/bump_version.py` moves to the next version (with rollover)
 in every file. Then add a `CHANGELOG.md` entry, commit, and push tag `v<version>`.
-The release workflow builds the wheel, sdist and noarch RPM (each about 100 KB)
-and a Flatpak bundle (about 12 MB), and attaches them to the GitHub release.
-Flatpak bundles are kept on the two newest releases only, workflow artifacts
-expire after a day, and no binaries are committed to git.
+The release workflow attaches these files, each named with the version, to the
+GitHub release: `catflap-<v>.tar.gz`, `catflap-<v>-py3-none-any.whl`,
+`catflap-<v>-1.noarch.rpm` (about 100 KB each) and `catflap-<v>.flatpak` (about
+12 MB). All releases and their files are kept.
+
+**Keeping GitHub usage low:**
+
+- Release files don't count against Actions or Packages storage.
+- The only Actions storage is the files passed between release jobs, which
+  expire after one day.
+- No caches, no GitHub Packages, and no binaries in git.
+- CI runs one Linux job, only on `main` and pull requests. It skips docs-only
+  changes and cancels superseded runs.
+- Windows tests and the Flatpak build run once per release.
 
 ## Ansible
 
