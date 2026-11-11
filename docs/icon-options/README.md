@@ -24,3 +24,9 @@ tray icon is drawn in code (`catflap/ui_common.py`) and uses option A's shape.
 | P | `p-sky-cat.svg` | A in C's blues with a light-blue cat and a white frame |
 | Q | `q-tunnel-peek.svg` | C's tunnel arches as the cat flap, with A's cat peeking out |
 | R | `r-night-blue.svg` | A on navy with a blue-gradient cat |
+| Q2 | `q2-tunnel-peek.svg` | Q with a redrawn cat: round head, wider ears, shoulders, eye highlights |
+| Q3 | `q3-tunnel-paws.svg` | Q2 with the cat's paws resting on the tunnel edge |
+| Q4 | `q4-tunnel-sky.svg` | Q3 with a soft sky-blue cat |
+
+Note: Qt's SVG renderer (also used by KDE for icons) ignores `clipPath`, so
+shapes must not rely on clipping to look right.
