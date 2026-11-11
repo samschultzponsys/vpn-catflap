@@ -78,13 +78,16 @@ def test_flatpak_update_downloads_bundle_and_explains(monkeypatch, tmp_path):
     # host commands not permitted -> downloaded, one command left, then restart
     res = update.apply_update(st, run=lambda c: ran.append(c) or 1)
     assert not res.done and res.restart and res.downloaded == tmp_path / "catflap-9.9.flatpak"
-    assert res.commands == [f"flatpak install --user -y {tmp_path}/catflap-9.9.flatpak"]
+    assert res.commands == [f"flatpak install --user -y {tmp_path / 'catflap-9.9.flatpak'}"]
     # permitted -> installs on the host
     ran.clear()
     res = update.apply_update(st, run=lambda c: ran.append(c) or 0)
     assert res.done and res.restart and ran[-1][:3] == ["flatpak-spawn", "--host", "flatpak"]
 
 
-def test_restart_command_runs_latest_version():
+def test_restart_command_runs_latest_version(monkeypatch):
     assert update.restart_command(InstallInfo("flatpak")) == ["flatpak-spawn", "--latest-version", "catflap-tray"]
-    assert update.restart_command(InstallInfo("pip"))[-1] == "tray"
+    monkeypatch.setattr(update.shutil, "which", lambda n: None)
+    assert update.restart_command(InstallInfo("pip"))[-2:] == ["catflap", "tray"]
+    monkeypatch.setattr(update.shutil, "which", lambda n: "/usr/bin/catflap-tray")
+    assert update.restart_command(InstallInfo("rpm")) == ["/usr/bin/catflap-tray"]
