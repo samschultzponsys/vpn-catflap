@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><!-- Z1a: white cat sitting in the tunnel, reaching up -->
+<defs><linearGradient id="t" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3B82F6"/><stop offset="1" stop-color="#1E3A8A"/></linearGradient></defs>
+<rect x="6" y="6" width="116" height="116" rx="26" fill="url(#t)"/>
+<path d="M18 110 V66 A46 46 0 0 1 110 66 V110" fill="none" stroke="#BFDBFE" stroke-width="7" stroke-linecap="round"/>
+<path d="M30 110 V68 A34 34 0 0 1 98 68 V110" fill="none" stroke="#93C5FD" stroke-width="5" stroke-linecap="round" opacity=".75"/>
+<path d="M38 110 V70 A26 26 0 0 1 90 70 V110 Z" fill="#0B1533"/><g transform="translate(23.800000000000004 46.64000000000001) scale(0.6)"><path d="M63 44 L65 27 L72 35.5 C74 35 76 35 78 35.5 L84.5 27.5 L85 38.5 C87 40.5 88.5 43 90.5 45.5 C91 47 90 48.5 88.5 49 C87.5 50 86.5 50.8 85 51 C90 45 96 36 101 29.5 C102.5 26.8 106 26 107.6 28.4 C108.8 30.6 107.4 33.4 105.6 34.6 C99.5 41 94 49 90.5 56 C88.5 62 88 71 88.5 81 C89 89 90 96 92 100 C94 101 94.6 104 93 105.2 L84.2 105.2 C83.4 99 82.4 94 80.8 89.5 C77.5 93 74.5 98 73.2 101 C75.2 102 75.8 104.6 74 105.6 L37 105.6 C30 105.6 25.5 101.5 26.2 96.5 C26.7 93 30 92.4 31 95 C31.6 97.5 33.2 99.8 38 100.2 L46.5 100.2 C43 97 42.4 90 43.4 85 C45 77 50 71.5 55.5 67.5 C60.5 63.5 62.3 58 62.6 53 C62.8 49.5 62.9 46.5 63 44 Z" fill="#F8FAFC"/></g>
+</svg>

@@ -38,3 +38,8 @@ shapes must not rely on clipping to look right.
 | Y1 | `y1-paw-through-pink.svg` | Blue tunnel; a cartoon white paw pushing through towards you, pink toe beans |
 | Y2 | `y2-paw-through-blue.svg` | Same, light-blue toe beans |
 | Y3 | `y3-paw-big-pink.svg` | Bigger paw reaching further out past the tunnel edge, pink toe beans |
+| Z1a | `z1a-cat-in-tunnel.svg` | White cat silhouette sitting in the tunnel, reaching up |
+| Z1b | `z1b-cat-reaching-out.svg` | Bigger cat reaching up and out past the arches |
+| Z1c | `z1c-cat-front.svg` | Cat sitting in front of the tunnel, reaching up |
+| Z2 | `z2-paw-line.svg` | Centred line-style paw rising out of the tunnel |
+| Z3 | `z3-paw-solid.svg` | Centred solid paw rising out of the tunnel |
