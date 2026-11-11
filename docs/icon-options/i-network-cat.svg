@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><!-- I: Network cat (nodes & links) -->
+<defs><linearGradient id="t" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6366F1"/><stop offset="1" stop-color="#312E81"/></linearGradient></defs>
+<rect x="6" y="6" width="116" height="116" rx="26" fill="url(#t)"/>
+<g stroke="#C7D2FE" stroke-width="4" stroke-linecap="round" fill="none">
+<path d="M32 100 L32 58 L36 26 L54 44 L74 44 L92 26 L96 58 L96 100 Z"/>
+<path d="M32 58 L64 70 L96 58 M64 70 L64 100"/></g>
+<g fill="#EEF2FF"><circle cx="36" cy="26" r="6"/><circle cx="92" cy="26" r="6"/><circle cx="32" cy="58" r="6"/>
+<circle cx="96" cy="58" r="6"/><circle cx="64" cy="70" r="7"/><circle cx="32" cy="100" r="6"/><circle cx="96" cy="100" r="6"/><circle cx="64" cy="100" r="6"/></g>
+<circle cx="64" cy="70" r="3" fill="#4338CA"/></svg>

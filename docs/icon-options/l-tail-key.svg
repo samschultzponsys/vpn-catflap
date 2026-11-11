@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><!-- L: Sitting cat, tail turns into a key -->
+<defs><linearGradient id="t" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F1F5F9"/><stop offset="1" stop-color="#CBD5E1"/></linearGradient></defs>
+<rect x="6" y="6" width="116" height="116" rx="26" fill="url(#t)"/>
+<path d="M34 104 C30 84 34 66 44 58 C38 52 38 40 42 34 L46 22 L54 32 L62 22 L64 36 C68 42 66 52 58 58 C68 66 72 84 68 104 Z" fill="#1E293B"/>
+<path d="M68 100 H92 M92 100 V108 M84 100 V106" fill="none" stroke="#16A34A" stroke-width="6" stroke-linecap="round"/>
+<circle cx="98" cy="92" r="11" fill="none" stroke="#16A34A" stroke-width="6"/>
+<circle cx="48" cy="44" r="2.5" fill="#86EFAC"/><circle cx="58" cy="44" r="2.5" fill="#86EFAC"/></svg>
