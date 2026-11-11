@@ -21,7 +21,12 @@ RUN_KEY = r"Software\\Microsoft\\Windows\\CurrentVersion\\Run"
 
 
 def _autostart_file() -> Path:
-    base = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+    if os.environ.get("FLATPAK_ID"):
+        # Inside the sandbox XDG_CONFIG_HOME is the app's private dir; the session
+        # reads ~/.config/autostart (granted with --filesystem=xdg-config/autostart:create).
+        base = Path.home() / ".config"
+    else:
+        base = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
     return base / "autostart" / "catflap.desktop"
 
 

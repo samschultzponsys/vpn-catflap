@@ -18,6 +18,11 @@ from catflap import version as v  # noqa: E402
 
 VERSION_PY = ROOT / "catflap" / "version.py"
 SPEC = ROOT / "packaging" / "rpm" / "catflap.spec"
+METAINFO = ROOT / "packaging" / "flatpak" / "io.github.samschultzponsys.CatFlap.metainfo.xml"
+
+
+def metainfo_version() -> str:
+    return re.search(r'<release version="([^"]+)"', METAINFO.read_text()).group(1)
 
 
 def spec_version() -> str:
@@ -27,8 +32,9 @@ def spec_version() -> str:
 def main(argv: list[str]) -> int:
     cur = v.__version__
     if argv[:1] == ["--check"]:
-        if spec_version() != cur:
-            print(f"version mismatch: version.py={cur} spec={spec_version()}")
+        if spec_version() != cur or metainfo_version() != cur:
+            print(f"version mismatch: version.py={cur} spec={spec_version()} "
+                  f"metainfo={metainfo_version()}")
             return 1
         v.parse(cur)
         print(cur)
@@ -41,6 +47,10 @@ def main(argv: list[str]) -> int:
         return 0
     new = v.next_version(cur)
     VERSION_PY.write_text(re.sub(r'__version__ = "[^"]+"', f'__version__ = "{new}"', VERSION_PY.read_text()))
+    import datetime
+    today = datetime.date.today().isoformat()
+    METAINFO.write_text(METAINFO.read_text().replace(
+        "<releases>", f'<releases>\n    <release version="{new}" date="{today}"/>', 1))
     SPEC.write_text(re.sub(r"^(Version:\s*)\S+", rf"\g<1>{new}", SPEC.read_text(), flags=re.M))
     print(f"{cur} -> {new}\nNext: add a CHANGELOG.md entry, commit, then: git tag v{new} && git push --tags")
     return 0

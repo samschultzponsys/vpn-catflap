@@ -34,6 +34,25 @@ SAFE_SETTINGS: list[tuple[str, str]] = [
 ]
 
 
+def check_settings(s: dict[str, str], profile: Profile) -> list[str]:
+    """Check NetworkManager settings (nmcli-style keys) against the safe defaults."""
+    problems = []
+    if s.get("connection.autoconnect") not in ("no", "false"):
+        problems.append("autoconnect is on")
+    if s.get("ipv4.never-default") not in ("yes", "true"):
+        problems.append("IPv4 may become the default route")
+    if s.get("ipv6.method") != "disabled":
+        problems.append(f"IPv6 method is {s.get('ipv6.method')!r}, not disabled")
+    for k in ("ipv4.dns-search", "ipv6.dns-search"):
+        domains = [d for d in s.get(k, "").split(",") if d]
+        if "~" in domains or "~." in domains:
+            problems.append(f"{k} contains a catch-all '~' domain")
+    ifname = s.get("connection.interface-name")
+    if ifname and ifname != profile.ifname:
+        problems.append(f"interface name is {ifname!r}, expected {profile.ifname!r}")
+    return problems
+
+
 class NetworkManagerBackend(Backend):
     name = "networkmanager"
 
@@ -114,22 +133,7 @@ class NetworkManagerBackend(Backend):
 
     def verify(self, uuid: str, profile: Profile) -> list[str]:
         """Read the connection back and check the safety settings stuck (#4, #5, #7)."""
-        s = self.read_settings(uuid)
-        problems = []
-        if s.get("connection.autoconnect") not in ("no", "false"):
-            problems.append("autoconnect is on")
-        if s.get("ipv4.never-default") not in ("yes", "true"):
-            problems.append("IPv4 may become the default route")
-        if s.get("ipv6.method") != "disabled":
-            problems.append(f"IPv6 method is {s.get('ipv6.method')!r}, not disabled")
-        for k in ("ipv4.dns-search", "ipv6.dns-search"):
-            domains = [d for d in s.get(k, "").split(",") if d]
-            if "~" in domains or "~." in domains:
-                problems.append(f"{k} contains a catch-all '~' domain")
-        ifname = s.get("connection.interface-name")
-        if ifname and ifname != profile.ifname:
-            problems.append(f"interface name is {ifname!r}, expected {profile.ifname!r}")
-        return problems
+        return check_settings(self.read_settings(uuid), profile)
 
     def remove(self, profile: Profile) -> None:
         if profile.backend_id:

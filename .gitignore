@@ -8,3 +8,7 @@ dist/
 *.conf
 !tests/data/*.conf
 catflap-export*.json
+build-dir/
+.flatpak-builder/
+repo/
+*.flatpak

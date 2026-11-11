@@ -1,0 +1,48 @@
+# Build and install locally (Fedora):
+#   flatpak install --user flathub org.kde.Sdk//6.11 io.qt.PySide.BaseApp//6.11
+#   flatpak-builder --user --install --force-clean build-dir packaging/flatpak/io.github.samschultzponsys.CatFlap.yml
+id: io.github.samschultzponsys.CatFlap
+runtime: org.kde.Platform
+runtime-version: '6.11'
+sdk: org.kde.Sdk
+base: io.qt.PySide.BaseApp
+base-version: '6.11'
+command: catflap-tray
+build-options:
+  env:
+    BASEAPP_REMOVE_WEBENGINE: '1'      # catflap doesn't use Qt WebEngine / numpy:
+    BASEAPP_DISABLE_NUMPY: '1'         # strip them to keep the bundle small
+cleanup-commands:
+  - /app/cleanup-BaseApp.sh
+  - /app/share/catflap/trim.sh
+finish-args:
+  - --share=ipc
+  - --share=network                       # WireGuard endpoint lookups, gateway APIs, update check
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  # Create/activate WireGuard connections (NetworkManager over D-Bus; polkit decides)
+  - --system-talk-name=org.freedesktop.NetworkManager
+  # API keys and private keys in the desktop keyring (KWallet / GNOME Keyring)
+  - --talk-name=org.freedesktop.secrets
+  # Tray icon (StatusNotifierItem) and notifications
+  - --talk-name=org.kde.StatusNotifierWatcher
+  - --own-name=org.kde.StatusNotifierItem-2-1
+  - --talk-name=org.freedesktop.Notifications
+  # "Start at login" and downloaded .conf files / update bundles
+  - --filesystem=xdg-config/autostart:create
+  - --filesystem=xdg-download
+modules:
+  - python-deps.json
+
+  - name: catflap
+    buildsystem: simple
+    build-commands:
+      - sh packaging/flatpak/install-app.sh
+    sources:
+      - type: dir
+        path: ../..
+        skip:
+          - .git
+          - build-dir
+          - .flatpak-builder

@@ -11,7 +11,7 @@ REL = ReleaseInfo(version="9.9", url="https://github.com/x/releases/v9.9",
 def test_check_detects_newer_and_gives_method_instructions():
     st = update.check({}, fetch=lambda: REL, install=InstallInfo("flatpak", "io.x.CatFlap"))
     assert st.available
-    assert st.instructions[0] == "flatpak update io.x.CatFlap"
+    assert st.instructions[-1] == "flatpak install --user -y ~/Downloads/catflap-9.9.flatpak"
 
 
 def test_instructions_per_method():
@@ -62,3 +62,20 @@ def test_cli_up_failure_exit_code(manager, backend, capsys):
     backend.rx = 0
     backend.ping_ok = False
     assert cli.main(["up", "home"], manager=manager) == 3
+
+
+def test_flatpak_update_downloads_bundle_and_explains(monkeypatch, tmp_path):
+    rel = ReleaseInfo(version="9.9", url="u", assets={"catflap-9.9.flatpak": "https://dl/catflap-9.9.flatpak"})
+    st = update.check({}, fetch=lambda: rel, install=InstallInfo("flatpak", "io.x.CatFlap", True))
+    assert st.instructions[-1] == "flatpak install --user -y ~/Downloads/catflap-9.9.flatpak"
+    monkeypatch.setenv("XDG_DOWNLOAD_DIR", str(tmp_path))
+    monkeypatch.setattr(update, "_download", lambda url, d: d / "catflap-9.9.flatpak")
+    monkeypatch.setattr(update.shutil, "which", lambda n: "/usr/bin/flatpak-spawn")
+    ran = []
+    # host commands not permitted -> download + instructions
+    ok, msg = update.apply_update(st, run=lambda c: ran.append(c) or 1)
+    assert not ok and "flatpak install --user -y" in msg and "flatpak override" in msg
+    # permitted -> installs on the host
+    ran.clear()
+    ok, _ = update.apply_update(st, run=lambda c: ran.append(c) or 0)
+    assert ok and ran[-1][:3] == ["flatpak-spawn", "--host", "flatpak"]

@@ -103,10 +103,27 @@ private key in the same response.
   the connection is deleted. Status comes from `/sys/class/net/<if>/statistics`,
   which is readable as a normal user. The handshake time comes from `wg show`
   only when that is permitted.
+- **NetworkManager over D-Bus** (`nm_dbus.py`, via the pure-Python `jeepney`):
+  used inside the Flatpak and wherever `nmcli` is missing (`CATFLAP_BACKEND`
+  overrides the choice). It builds the connection directly from settings with
+  `AddConnection`, so no `.conf` file is written at all, then reads it back with
+  `GetSettings` and applies the same `check_settings()` verification as the nmcli
+  backend. Local routes and addresses come from each device's `IP4Config`, and
+  pings use an unprivileged ICMP socket.
 - **Windows** (under development): `wireguard.exe /installtunnelservice` on
   connect and `/uninstalltunnelservice` on disconnect, elevated through UAC for
   those two calls only. Config files live in `%LOCALAPPDATA%\catflap\tunnels`,
   restricted to the user and SYSTEM.
+
+## Flatpak
+
+`packaging/flatpak/io.github.samschultzponsys.CatFlap.yml` builds on the KDE 6.11
+runtime with Flathub's `io.qt.PySide.BaseApp`. `trim.sh` removes what catflap
+doesn't use (LLVM/clang, PyOpenGL, FFmpeg, every Qt binding except
+Core/Gui/Widgets/DBus), taking the app from about 314 MB to 50 MB installed and a
+12 MB bundle. Python dependencies are pinned wheels with checksums, listed in
+`python-deps.json` and regenerated with `gen-python-deps.py`. The sandbox
+permissions and why each is needed are listed in the README.
 
 ## Security model
 
@@ -139,6 +156,7 @@ catflap's model unchanged.
 
 ## Roadmap
 
-- Milestone 2: Omada Open API driver; .deb package; Windows testing and installer.
+- Milestone 2: Omada Open API driver; .deb package; Windows testing and installer;
+  possibly a Flatpak remote (OSTree repo) so `flatpak update` works without bundles.
 - Milestone 3: Alta Labs driver; VPS relay driver for CGNAT sites; privileged
   helper (polkit) for handshake age without root.

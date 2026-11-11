@@ -103,7 +103,10 @@ class Backend(abc.ABC):
         return False
 
     def ping(self, host: str, count: int = 1, timeout_s: int = 2) -> bool:
+        import shutil
         import sys
+        if not shutil.which("ping"):   # e.g. inside the Flatpak sandbox
+            return any(icmp_ping(host, timeout_s) for _ in range(count))
         if sys.platform == "win32":
             cmd = ["ping", "-n", str(count), "-w", str(timeout_s * 1000), host]
         else:
@@ -111,10 +114,41 @@ class Backend(abc.ABC):
         return self.run(cmd).returncode == 0
 
 
+def icmp_ping(host: str, timeout_s: float = 2) -> bool:
+    """Unprivileged ICMP echo (Linux SOCK_DGRAM ICMP; needs net.ipv4.ping_group_range,
+    which Fedora and Debian allow for all users)."""
+    import os
+    import select
+    import socket
+    import struct
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_ICMP)
+    except OSError:
+        return False
+    with s:
+        seq = os.getpid() & 0xFFFF
+        try:
+            s.sendto(struct.pack("!BBHHH", 8, 0, 0, 0, seq) + b"catflap", (host, 0))
+            r, _, _ = select.select([s], [], [], timeout_s)
+            if not r:
+                return False
+            data = s.recv(1024)
+        except OSError:
+            return False
+        return len(data) >= 8 and data[0] == 0   # echo reply
+
+
 def get_backend(runner: Runner = run) -> Backend:
     import sys
     if sys.platform == "win32":
         from .windows import WindowsBackend
         return WindowsBackend(runner)
-    from .networkmanager import NetworkManagerBackend
-    return NetworkManagerBackend(runner)
+    import os
+    import shutil
+    choice = os.environ.get("CATFLAP_BACKEND")
+    if choice == "nmcli" or (choice is None and shutil.which("nmcli")):
+        from .networkmanager import NetworkManagerBackend
+        return NetworkManagerBackend(runner)
+    # No nmcli (Flatpak sandbox, minimal installs): talk to NetworkManager over D-Bus.
+    from .nm_dbus import NetworkManagerDBusBackend
+    return NetworkManagerDBusBackend(runner)

@@ -109,19 +109,33 @@ if QtCore is not None:
     class _Job(QtCore.QRunnable):
         def __init__(self, fn: Callable[[], Any], cb: Callable[[Any, Any], None]):
             super().__init__()
-            self.fn, self.sig = fn, _Signals()
-            self.sig.done.connect(cb)
+            # Python owns the job: Qt must not delete it (and its signal object)
+            # while the result is still queued for the UI thread.
+            self.setAutoDelete(False)
+            self.fn, self.cb, self.sig = fn, cb, _Signals()
+            self.sig.done.connect(self._finish, QtCore.Qt.QueuedConnection)
 
         def run(self) -> None:
             try:
-                self.sig.done.emit(self.fn(), None)
+                result, err = self.fn(), None
             except Exception as e:  # noqa: BLE001 - reported to the UI
                 traceback.print_exc()
-                self.sig.done.emit(None, e)
+                result, err = None, e
+            self.sig.done.emit(result, err)
+
+        def _finish(self, result: Any, err: Any) -> None:
+            try:
+                self.cb(result, err)
+            finally:
+                _JOBS.discard(self)
+
+    _JOBS: set = set()
 
 
 def run_bg(fn: Callable[[], Any], cb: Callable[[Any, Any], None]) -> None:
-    QtCore.QThreadPool.globalInstance().start(_Job(fn, cb))
+    job = _Job(fn, cb)
+    _JOBS.add(job)
+    QtCore.QThreadPool.globalInstance().start(job)
 
 
 # ============================================================ dialogs
@@ -699,6 +713,14 @@ def main(argv: list[str] | None = None) -> int:
     if not QtWidgets.QSystemTrayIcon.isSystemTrayAvailable():
         print("catflap: no system tray available; showing the window only", file=sys.stderr)
     app = TrayApp(qapp)
+    # Quit cleanly on logout/SIGTERM/Ctrl+C: Python only handles signals while
+    # it runs, so wake the interpreter regularly.
+    import signal
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(sig, lambda *_: app.quit())
+    wake = QtCore.QTimer()
+    wake.timeout.connect(lambda: None)
+    wake.start(500)
     app.tray.show()
     if "--minimized" not in argv:
         app.show_window()

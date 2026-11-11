@@ -41,4 +41,8 @@ Copy this list into the release issue and tick it off.
 - [ ] **Tray: per-site colour** via *Colour…* and via `catflap set --color`
 - [ ] **Updates:** `catflap version` shows the install method (rpm, pipx, source…). With a fake older version (`CATFLAP_INSTALL_METHOD=rpm` and an older `__version__`), `catflap update --check` prints the right command (`test_update_cli.py`)
 - [ ] **Versioning:** `scripts/bump_version.py` goes 0.9 → 1.0; a release tag that doesn't match `version.py` fails the release workflow (`test_version.py`)
+- [ ] **Flatpak:** install the bundle (or build locally). `flatpak run --command=catflap io.github.samschultzponsys.CatFlap version` says *installed via: flatpak*. Provision/import, then connect from the tray. `nmcli c show` lists `catflap <name>` with the safe settings (problems #2–#7 checks above). Credentials are in KWallet, under the Secret Service collection
+- [ ] **Flatpak: polkit** allows the connection change for the desktop user without a password prompt (or prompts once, per your polkit policy)
+- [ ] **Flatpak: tray icon** appears in the Plasma system tray (StatusNotifierItem) and notifications show
+- [ ] **Flatpak: update** with an older bundle installed, *Check for updates* downloads the new bundle to `~/Downloads` and shows the install command. After `flatpak override --user --talk-name=org.freedesktop.Flatpak io.github.samschultzponsys.CatFlap` it installs it itself
 - [ ] **Windows** (when available): WireGuard for Windows installed; `catflap up` triggers UAC once; `sc query WireGuardTunnel$cf-home` → RUNNING; `catflap down` removes the service

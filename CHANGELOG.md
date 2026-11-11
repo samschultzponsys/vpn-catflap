@@ -17,3 +17,5 @@ Versions are `MAJOR.MINOR`; the minor number runs 0–9 and then rolls over
   the local keyring.
 - Encrypted export/import to move a setup to another PC.
 - Update checks with install-method-aware update instructions and automatic update.
+- Flatpak (KDE 6.11 + PySide base app, 12 MB bundle) with a NetworkManager D-Bus
+  backend that needs no nmcli/ip/ping inside the sandbox.

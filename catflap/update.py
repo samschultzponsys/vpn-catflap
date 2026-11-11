@@ -7,7 +7,8 @@ the install method, which is detected and shown in the app:
 =============  ==================================================  ==========
 method         update                                              automatic
 =============  ==================================================  ==========
-flatpak        ``flatpak update <app-id>``                         if allowed
+flatpak        download the release .flatpak bundle, then          if allowed*
+               ``flatpak install --user -y <bundle>``
 rpm            ``pkexec dnf install <release .rpm URL>``           yes
 deb            download .deb, ``pkexec apt install ./file.deb``    yes
 pipx           ``pipx install --force <release wheel URL>``        yes
@@ -15,6 +16,11 @@ pip            ``python -m pip install --upgrade <wheel URL>``     yes
 windows        download and run the release installer             yes
 source         ``git fetch --tags && git checkout vX.Y``          no
 =============  ==================================================  ==========
+
+\* The sandbox can't run host ``flatpak`` commands unless the user grants it
+(``flatpak override --user --talk-name=org.freedesktop.Flatpak <app-id>``).
+Without that, catflap downloads the bundle to ~/Downloads and shows the one
+command to run.
 """
 
 from __future__ import annotations
@@ -82,7 +88,7 @@ def detect_install(env: dict[str, str] | None = None) -> InstallInfo:
     if forced:
         return InstallInfo(forced, "set by CATFLAP_INSTALL_METHOD", forced not in ("source", "flatpak"))
     if env.get("FLATPAK_ID") or Path("/.flatpak-info").exists():
-        return InstallInfo("flatpak", env.get("FLATPAK_ID", FLATPAK_ID), automatic=bool(shutil.which("flatpak-spawn")))
+        return InstallInfo("flatpak", env.get("FLATPAK_ID", FLATPAK_ID), automatic=True)
     if sys.platform == "win32":
         if getattr(sys, "frozen", False):
             return InstallInfo("windows", sys.executable, automatic=True)
@@ -125,9 +131,13 @@ def instructions(info: InstallInfo, rel: ReleaseInfo) -> list[str]:
     v = rel.version
     m = info.method
     if m == "flatpak":
-        app = info.detail or FLATPAK_ID
-        return [f"flatpak update {app}",
-                f"(system-wide install: sudo flatpak update {app})"]
+        url = _asset(rel, ".flatpak")
+        if not url:
+            return [f"Download catflap-{v}.flatpak from {rel.url}",
+                    f"flatpak install --user -y ~/Downloads/catflap-{v}.flatpak"]
+        name = url.rsplit("/", 1)[-1]
+        return [f"curl -L -o ~/Downloads/{name} {url}",
+                f"flatpak install --user -y ~/Downloads/{name}"]
     if m == "rpm":
         url = _asset(rel, ".noarch.rpm") or rel.url
         return [f"sudo dnf install {url}"]
@@ -168,6 +178,16 @@ def check(settings: dict[str, Any] | None = None, force: bool = True,
     return st
 
 
+def host_commands_allowed(run: Callable[[list[str]], int]) -> bool:
+    """True if this Flatpak may run host commands (org.freedesktop.Flatpak granted)."""
+    if not shutil.which("flatpak-spawn"):
+        return False
+    try:
+        return run(["flatpak-spawn", "--host", "true"]) == 0
+    except OSError:
+        return False
+
+
 def _download(url: str, dest_dir: Path) -> Path:
     dest = dest_dir / url.rsplit("/", 1)[-1]
     req = urllib.request.Request(url, headers={"User-Agent": "catflap-updater"})
@@ -183,9 +203,18 @@ def apply_update(st: UpdateStatus, run: Callable[[list[str]], int] | None = None
     run = run or (lambda c: subprocess.call(c))
     m, rel = st.install.method, st.latest
     if m == "flatpak":
-        if not shutil.which("flatpak-spawn"):
-            return False, "Run: " + " ".join(instructions(st.install, rel)[:1])
-        rc = run(["flatpak-spawn", "--host", "flatpak", "update", "-y", st.install.detail or FLATPAK_ID])
+        url = _asset(rel, ".flatpak")
+        if not url:
+            return False, "This release has no Flatpak bundle; see " + rel.url
+        dl = Path(os.environ.get("XDG_DOWNLOAD_DIR", Path.home() / "Downloads"))
+        dl.mkdir(parents=True, exist_ok=True)
+        bundle = _download(url, dl)
+        cmd = ["flatpak", "install", "--user", "-y", str(bundle)]
+        if not host_commands_allowed(run):
+            return False, ("Downloaded the update to " + str(bundle) + ". Install it with:\n  "
+                           + " ".join(cmd) + "\n(To let catflap do this itself next time: "
+                           f"flatpak override --user --talk-name=org.freedesktop.Flatpak {st.install.detail or FLATPAK_ID})")
+        rc = run(["flatpak-spawn", "--host", *cmd])
     elif m == "rpm":
         url = _asset(rel, ".noarch.rpm")
         if not url:

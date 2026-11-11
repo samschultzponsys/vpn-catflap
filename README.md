@@ -57,21 +57,86 @@ from the UniFi UI and use `catflap import` instead. Every safety rule still appl
 
 | Platform | Backend | Status |
 |---|---|---|
-| Fedora (KDE Plasma, Wayland) | NetworkManager | primary |
+| Fedora (KDE Plasma, Wayland) | NetworkManager (nmcli, or D-Bus inside the Flatpak) | primary; Flatpak recommended |
 | Debian / Ubuntu | NetworkManager | supported |
 | Windows 10/11 | WireGuard for Windows tunnel service | under development; not yet tested on real Windows machines |
 
 ## Install
 
-**Fedora (RPM from the release page):**
+Releases appear on the [releases page](https://github.com/samschultzponsys/vpn-catflap/releases)
+once a version tag (e.g. `v0.1`) has been pushed. Each release has a Flatpak bundle,
+an RPM and a Python wheel.
+
+### Fedora: Flatpak (recommended)
+
+**From a release** (Flathub is used for the KDE runtime and PySide):
 
 ```bash
-sudo dnf install https://github.com/samschultzponsys/vpn-catflap/releases/latest/download/catflap-<version>-1.noarch.rpm
+flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 ```
 
-Or download the `.noarch.rpm` from the [releases page](https://github.com/samschultzponsys/vpn-catflap/releases)
-and run `sudo dnf install ./catflap-*.rpm`. The RPM also installs PySide6 (for the
-tray) and wireguard-tools as recommended packages.
+```bash
+curl -L -o ~/Downloads/catflap.flatpak https://github.com/samschultzponsys/vpn-catflap/releases/download/v<version>/catflap-<version>.flatpak
+```
+
+```bash
+flatpak install --user -y ~/Downloads/catflap.flatpak
+```
+
+**Or build it yourself from this repository** (no release needed; about 1 GB of
+SDK download the first time):
+
+```bash
+sudo dnf install flatpak-builder git
+```
+
+```bash
+flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+```
+
+```bash
+flatpak install --user -y flathub org.kde.Sdk//6.11 io.qt.PySide.BaseApp//6.11
+```
+
+```bash
+git clone https://github.com/samschultzponsys/vpn-catflap && cd vpn-catflap
+```
+
+```bash
+flatpak-builder --user --install --force-clean build-dir packaging/flatpak/io.github.samschultzponsys.CatFlap.yml
+```
+
+Start **catflap** from the application menu. On the command line, the CLI is:
+
+```bash
+flatpak run --command=catflap io.github.samschultzponsys.CatFlap --help
+```
+
+An alias saves typing: `alias catflap='flatpak run --command=catflap io.github.samschultzponsys.CatFlap'`.
+
+What the sandbox is allowed to do, and why:
+
+| Permission | Why |
+|---|---|
+| System bus: `org.freedesktop.NetworkManager` | Create, connect and disconnect the WireGuard connections. Polkit still decides, as for any desktop app |
+| Session bus: `org.freedesktop.secrets` | API keys and private keys in KWallet / GNOME Keyring |
+| `org.kde.StatusNotifierWatcher`, `org.freedesktop.Notifications` | Tray icon and notifications |
+| Network | Gateway APIs, endpoint lookups, update check |
+| `~/.config/autostart` | The *Start at login* option |
+| `~/Downloads` | Importing downloaded `.conf` files; downloading updates |
+
+The Flatpak doesn't need `nmcli`, `ip` or `ping`: it talks to NetworkManager
+over D-Bus and pings with an unprivileged ICMP socket. Its settings live in
+`~/.var/app/io.github.samschultzponsys.CatFlap/config/catflap/`. That is separate from
+an RPM/pip install, so use **Export/Import** to move between them.
+
+### Fedora: RPM
+
+```bash
+sudo dnf install https://github.com/samschultzponsys/vpn-catflap/releases/download/v<version>/catflap-<version>-1.noarch.rpm
+```
+
+The RPM also installs PySide6 (for the tray) and wireguard-tools as recommended packages.
 
 **Debian / Ubuntu (until the .deb is ready):**
 
@@ -364,7 +429,8 @@ Environment variables: `CATFLAP_API_KEY`, `CATFLAP_PASSWORD`, `CATFLAP_PASSPHRAS
 (secrets for non-interactive use), `CATFLAP_CONFIG_DIR` (state location),
 `CATFLAP_SECRETS=file` (use a 0600 file instead of the keyring, e.g. headless),
 `CATFLAP_WIREGUARD_EXE` (Windows: path to `wireguard.exe`),
-`CATFLAP_INSTALL_METHOD` (override install-method detection), `CATFLAP_ALLOW_ROOT=1`
+`CATFLAP_INSTALL_METHOD` (override install-method detection),
+`CATFLAP_BACKEND=dbus|nmcli` (choose the NetworkManager backend), `CATFLAP_ALLOW_ROOT=1`
 (allow running as root; not recommended).
 
 ## What catflap enforces (and why)
@@ -391,7 +457,7 @@ Each item maps to a numbered problem in [docs/TEST-CHECKLIST.md](docs/TEST-CHECK
 
 | What | Linux | Windows |
 |---|---|---|
-| Gateways, profiles, settings | `~/.config/catflap/state.json` (0600) | `%APPDATA%\catflap\state.json` |
+| Gateways, profiles, settings | `~/.config/catflap/state.json` (0600); Flatpak: `~/.var/app/io.github.samschultzponsys.CatFlap/config/catflap/` | `%APPDATA%\catflap\state.json` |
 | API keys, passwords, WireGuard private keys | System keyring (service `catflap`) | Windows Credential Manager |
 | Keyring fallback (`CATFLAP_SECRETS=file`) | `~/.config/catflap/secrets.json` (0600) | same folder |
 | The live connection | NetworkManager connection `catflap <name>` | `%LOCALAPPDATA%\catflap\tunnels\cf-<name>.conf` + WireGuard tunnel service |
@@ -412,17 +478,29 @@ ever sees the public key.
 |---|---|---|
 | RPM | `pkexec dnf install <release rpm>` | `sudo dnf install <release rpm URL>` |
 | .deb | `pkexec apt-get install ./<deb>` | `sudo apt install ./catflap_<v>_all.deb` |
-| Flatpak | via `flatpak-spawn` when allowed | `flatpak update io.github.samschultzponsys.CatFlap` (add `sudo` for system installs) |
+| Flatpak | downloads the new bundle to `~/Downloads`; installs it too if you allowed it (below) | `flatpak install --user -y ~/Downloads/catflap-<v>.flatpak` |
 | pipx | `pipx install --force <wheel>` | same |
 | pip | `pip install --upgrade <wheel>` | same |
 | Windows installer | downloads and runs the installer | download from the release page |
 | Source checkout | – | `git fetch --tags && git checkout v<version>` |
 
+**Flatpak updates.** A sandboxed app can't run `flatpak` on the host by itself.
+By default, **Help → Check for updates…** (or `catflap update`) downloads the new
+bundle to `~/Downloads` and shows the one command to run. To let catflap install
+it too, grant this once:
+
+```bash
+flatpak override --user --talk-name=org.freedesktop.Flatpak io.github.samschultzponsys.CatFlap
+```
+
+That permission lets the app run commands on the host, so it is off by default.
+
 Maintainers: `scripts/bump_version.py` moves to the next version (with rollover)
 in every file. Then add a `CHANGELOG.md` entry, commit, and push tag `v<version>`.
 The release workflow builds the wheel, sdist and noarch RPM (each about 100 KB)
-and attaches them to the GitHub release. Nothing else is stored: workflow
-artifacts expire after a day, and no binaries are committed to git.
+and a Flatpak bundle (about 12 MB), and attaches them to the GitHub release.
+Flatpak bundles are kept on the two newest releases only, workflow artifacts
+expire after a day, and no binaries are committed to git.
 
 ## Ansible
 

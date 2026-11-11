@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.samschultzponsys.CatFlap</id>
+  <name>catflap</name>
+  <summary>Safe one-click WireGuard remote access to your sites</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>Apache-2.0</project_license>
+  <developer id="io.github.samschultzponsys">
+    <name>samschultzponsys</name>
+  </developer>
+  <description>
+    <p>
+      catflap provisions and manages split-tunnel WireGuard connections to UniFi,
+      TP-Link Omada, Alta Labs and other gateways, with safe defaults (no DNS
+      hijack, no full tunnel, IPv6 off), pre-flight and health checks, and a
+      tray icon.
+    </p>
+  </description>
+  <launchable type="desktop-id">io.github.samschultzponsys.CatFlap.desktop</launchable>
+  <url type="homepage">https://github.com/samschultzponsys/vpn-catflap</url>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.1" date="2026-11-11"/>
+  </releases>
+</component>

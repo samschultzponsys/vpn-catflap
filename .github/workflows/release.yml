@@ -1,6 +1,7 @@
-# Runs only when a version tag (vMAJOR.MINOR) is pushed. Produces a small set
-# of release assets (wheel, sdist, noarch RPM: ~100 KB each); nothing is
-# committed back and workflow artifacts expire after one day.
+# Runs only when a version tag (vMAJOR.MINOR) is pushed. Release assets: wheel,
+# sdist and noarch RPM (~100 KB each) plus a Flatpak bundle (~12 MB). To keep
+# storage low, Flatpak bundles are kept on the two newest releases only;
+# nothing is committed back and workflow artifacts expire after one day.
 name: release
 on:
   push:
@@ -49,8 +50,32 @@ jobs:
           path: rpm/noarch/*.rpm
           retention-days: 1
 
+  flatpak:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install flatpak-builder, KDE SDK and PySide base app
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q flatpak flatpak-builder
+          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user -y --noninteractive flathub org.kde.Sdk//6.11 org.kde.Platform//6.11 io.qt.PySide.BaseApp//6.11
+      - name: Build bundle
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          flatpak-builder --user --disable-rofiles-fuse --force-clean --repo=repo build-dir \
+            packaging/flatpak/io.github.samschultzponsys.CatFlap.yml
+          flatpak build-bundle --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo \
+            repo "catflap-${v}.flatpak" io.github.samschultzponsys.CatFlap master
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flatpak
+          path: "*.flatpak"
+          retention-days: 1
+
   publish:
-    needs: [build, rpm]
+    needs: [build, rpm, flatpak]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -64,3 +89,12 @@ jobs:
         run: |
           notes=$(awk -v v="## ${GITHUB_REF_NAME#v}" '$0==v{f=1;next} /^## /{f=0} f' CHANGELOG.md)
           gh release create "$GITHUB_REF_NAME" out/* --title "catflap ${GITHUB_REF_NAME#v}" --notes "${notes:-See CHANGELOG.md}"
+      - name: Keep Flatpak bundles on the two newest releases only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for tag in $(gh release list --limit 100 --json tagName --jq '.[2:][].tagName'); do
+            for asset in $(gh release view "$tag" --json assets --jq '.assets[].name | select(endswith(".flatpak"))'); do
+              gh release delete-asset "$tag" "$asset" -y
+            done
+          done
