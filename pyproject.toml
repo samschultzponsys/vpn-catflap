@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "catflap"
+dynamic = ["version"]
+description = "Safe, one-click WireGuard remote access to your UniFi, Omada and Alta Labs sites, from a tray icon"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+requires-python = ">=3.11"
+dependencies = [
+    "keyring>=24",
+    "cryptography>=41",
+]
+classifiers = [
+    "Environment :: X11 Applications :: Qt",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: Microsoft :: Windows",
+    "Topic :: System :: Networking",
+]
+
+[project.optional-dependencies]
+tray = ["PySide6-Essentials>=6.5"]
+test = ["pytest>=7"]
+
+[project.scripts]
+catflap = "catflap.cli:main"
+
+[project.gui-scripts]
+catflap-tray = "catflap.tray:main"
+
+[project.urls]
+Homepage = "https://github.com/samschultzponsys/vpn-catflap"
+
+[tool.setuptools]
+packages = ["catflap", "catflap.drivers", "catflap.platform"]
+
+[tool.setuptools.dynamic]
+version = { attr = "catflap.version.__version__" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

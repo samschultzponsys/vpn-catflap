@@ -1,0 +1,66 @@
+# Runs only when a version tag (vMAJOR.MINOR) is pushed. Produces a small set
+# of release assets (wheel, sdist, noarch RPM: ~100 KB each); nothing is
+# committed back and workflow artifacts expire after one day.
+name: release
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Tag must match catflap/version.py (MAJOR.MINOR, minor 0-9)
+        run: python scripts/bump_version.py --tag "${GITHUB_REF_NAME}" && python scripts/bump_version.py --check
+      - run: python -m pip install build pytest keyring cryptography
+      - run: python -m pytest -q
+      - run: python -m build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 1
+
+  rpm:
+    needs: build
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - run: >
+          dnf install -y rpm-build python3-devel pyproject-rpm-macros python3-pytest
+          python3-setuptools python3-pip python3-wheel python3-packaging desktop-file-utils
+          python3-keyring python3-cryptography
+      - run: rpmbuild -bb packaging/rpm/catflap.spec --define "_sourcedir $PWD/dist" --define "_rpmdir $PWD/rpm"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rpm
+          path: rpm/noarch/*.rpm
+          retention-days: 1
+
+  publish:
+    needs: [build, rpm]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes=$(awk -v v="## ${GITHUB_REF_NAME#v}" '$0==v{f=1;next} /^## /{f=0} f' CHANGELOG.md)
+          gh release create "$GITHUB_REF_NAME" out/* --title "catflap ${GITHUB_REF_NAME#v}" --notes "${notes:-See CHANGELOG.md}"

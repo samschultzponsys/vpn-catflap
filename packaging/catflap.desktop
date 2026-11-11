@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=catflap
+GenericName=Site VPN
+Comment=Safe one-click WireGuard remote access to your sites
+Exec=catflap-tray
+Icon=catflap
+Terminal=false
+Categories=Network;Qt;
+Keywords=VPN;WireGuard;UniFi;Omada;Teleport;
+StartupNotify=false
