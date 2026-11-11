@@ -30,3 +30,7 @@ tray icon is drawn in code (`catflap/ui_common.py`) and uses option A's shape.
 
 Note: Qt's SVG renderer (also used by KDE for icons) ignores `clipPath`, so
 shapes must not rely on clipping to look right.
+| S1 | `s1-happy-tunnel.svg` | Friendly cat (closed smiling eyes, smile) peeking out of C's tunnel, paws on the edge |
+| S2 | `s2-happy-sitting.svg` | The friendly cat sitting at the tunnel, tail curled |
+| S3 | `s3-navy-cat.svg` | Navy friendly cat sitting under a white arch, light-blue tile |
+| S4 | `s4-happy-flap.svg` | The friendly cat in A's square cat flap |

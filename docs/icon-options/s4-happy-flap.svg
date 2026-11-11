@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><!-- S4: happy cat in A's square flap -->
+<defs><linearGradient id="t" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3B82F6"/><stop offset="1" stop-color="#1E3A8A"/></linearGradient></defs>
+<rect x="6" y="6" width="116" height="116" rx="26" fill="url(#t)"/><rect x="24" y="28" width="80" height="80" rx="16" fill="#0B1533"/><path d="M30 108 C31 101 46 97.5 64 97.5 C82 97.5 97 101 98 108 Z" fill="#F8FAFC"/><g transform="translate(9.6 14) scale(0.85)"><path d="M40 84 C40 72 43 64 46 59 L44.5 40 C44.4 37.6 46.6 36.6 48.4 38 L60.5 49.6 C62.9 49.2 65.1 49.2 67.5 49.6 L79.6 38 C81.4 36.6 83.6 37.6 83.5 40 L82 59 C85 64 88 72 88 84 C88 97 77 104 64 104 C51 104 40 97 40 84 Z" fill="#F8FAFC"/>
+<path d="M48.5 44 L57 52.5 C53.8 54.4 51.3 57 49.6 60 Z M79.5 44 L71 52.5 C74.2 54.4 76.7 57 78.4 60 Z" fill="#93C5FD"/>
+<path d="M50 79 Q55 73 60 79 M68 79 Q73 73 78 79" fill="none" stroke="#1E3A8A" stroke-width="3.4" stroke-linecap="round"/>
+<circle cx="49" cy="88" r="4.2" fill="#F9A8D4" opacity=".7"/><circle cx="79" cy="88" r="4.2" fill="#F9A8D4" opacity=".7"/>
+<path d="M60.5 84.5 H67.5 Q64 89 60.5 84.5 Z" fill="#1E3A8A"/>
+<path d="M57 89.5 Q64 101 71 89.5 Z" fill="#F472B6"/></g><rect x="24" y="28" width="80" height="80" rx="16" fill="none" stroke="#BFDBFE" stroke-width="6"/><line x1="33" y1="39" x2="95" y2="39" stroke="#BFDBFE" stroke-width="5" stroke-linecap="round"/>
+</svg>
