@@ -3,13 +3,28 @@
 Versions are `MAJOR.MINOR`; the minor number runs 0–9 and then rolls over
 (1.9 → 2.0). Every release is tagged `vMAJOR.MINOR`.
 
+## 0.5
+
+- **UniFi through the cloud:** the guide now uses an account API key from
+  unifi.ui.com and lets you pick your console. Traffic goes through Ubiquiti's cloud
+  connector, so no local address is needed. Direct access is still there for when
+  you're on site. CLI: `gateway add --cloud --console`, `gateway consoles`.
+- **Exact steps per brand** in the Add a site guide (UniFi, Omada, Alta Labs).
+- **Omada / other routers without a config file:** a new typed-in route where
+  catflap creates this computer's keys and you add it as a WireGuard peer.
+- No more "router address" question for file imports: pick the networks to reach
+  (pre-ticked from the file), with brand-specific help on where to find them.
+- The cat smiles now.
+- The title bar shows the current icon: windows load it from the icon shipped
+  inside catflap instead of the desktop's icon cache.
+
 ## 0.4
 
 - New app icon (T1): the first icon's cat sitting in a blue tunnel.
 - Tray icon redrawn to match: grey outline when disconnected, cat and tunnel in
   the site's colour when connected, red dot after a failure.
 - Windows, wizards and the update window use the installed app icon, so changing
-  `packaging/catflap.svg` changes it everywhere.
+  `catflap/resources/catflap.svg` changes it everywhere.
 
 ## 0.3
 

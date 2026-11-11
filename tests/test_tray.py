@@ -85,78 +85,136 @@ def test_first_run_wizard_previews_and_choice(qapp):
     assert w.add_now.isChecked()
 
 
-def test_site_wizard_unifi_automatic(qapp, manager, no_popups):
+def pick(w, vendor):
+    vp = w.page(ui_wizards.P_VENDOR)
+    next(b for b in vp.group.buttons() if b.property("vendor") == vendor).setChecked(True)
+    w.next()
+
+
+CONSOLES = [{"id": "AA:11", "name": "Home UDM", "model": "UDM Pro", "online": True},
+            {"id": "BB:22", "name": "Office UCG", "model": "", "online": True}]
+
+
+def test_site_wizard_unifi_cloud(qapp, manager, no_popups, monkeypatch):
+    from catflap.drivers import unifi
+    monkeypatch.setattr(unifi, "list_cloud_consoles", lambda key: CONSOLES)
     w = ui_wizards.SiteWizard(manager)
     w.show()
-    vp = w.page(ui_wizards.P_VENDOR)
-    next(b for b in vp.group.buttons() if b.property("vendor") == "unifi").setChecked(True)
-    w.next()
+    pick(w, "unifi")
     assert w.currentId() == ui_wizards.P_LOGIN
-    login = w.currentPage()
-    login.address.setText("192.168.7.1")
-    login.key.setText("NEWKEY")
+    access = w.currentPage()
+    assert access.cloud.isChecked() and access.address.isHidden()   # no router address asked
+    access.key.setText("CLOUDKEY")
+    w.next()
+    assert w.currentId() == ui_wizards.P_CONSOLE, no_popups
+    cp = w.currentPage()
+    assert cp.list.count() == 2
+    cp.list.setCurrentRow(1)
     w.next()
     assert w.currentId() == ui_wizards.P_SITE, no_popups
-    assert w.gateway == "unifi-192-168-7-1"
-    assert manager.secrets.get("gateway/unifi-192-168-7-1/api_key") == "NEWKEY"
+    gw = manager.store.gateway(w.gateway)
+    assert gw["url"] == "https://api.ui.com/v1/connector/consoles/BB:22"
+    assert gw["options"]["mode"] == "cloud" and gw["options"]["console_name"] == "Office UCG"
+    assert manager.secrets.get(f"gateway/{w.gateway}/api_key") == "CLOUDKEY"
     w.next()
     server = w.currentPage()
     wait_for(qapp, lambda: server.ok)
     w.next()
-    nets = w.currentPage()
-    assert nets.chosen() == ["192.168.1.0/24"]           # first network pre-ticked
+    assert w.currentPage().chosen() == ["192.168.1.0/24"]
     w.next()
-    name = w.currentPage()
-    assert name.name.text() == "Home"
+    assert w.currentPage().name.text() == "Home"
     w.next()
     assert w.currentId() == ui_wizards.P_DONE, no_popups
-    p = w.result.profile
-    assert p.label == "Home" and p.name == "home" and "192.168.1.0/24" in p.routes
+    assert w.result.profile.gateway == w.gateway
 
 
-def test_site_wizard_file_import_for_omada(qapp, manager, no_popups, unifi_conf):
+def test_site_wizard_unifi_direct(qapp, manager, no_popups):
     w = ui_wizards.SiteWizard(manager)
     w.show()
-    vp = w.page(ui_wizards.P_VENDOR)
-    next(b for b in vp.group.buttons() if b.property("vendor") == "omada").setChecked(True)
+    pick(w, "unifi")
+    access = w.currentPage()
+    access.direct.setChecked(True)
+    assert not access.address.isHidden()
+    access.address.setText("192.168.7.1")
+    access.key.setText("LOCALKEY")
     w.next()
-    assert w.currentId() == ui_wizards.P_FILE
-    fp = w.currentPage()
-    fp.path.setText(str(unifi_conf))
-    fp.router.setText("10.20.0.1")
+    assert w.currentId() == ui_wizards.P_SITE, no_popups
+    assert manager.store.gateway(w.gateway)["url"] == "https://192.168.7.1"
+
+
+def test_site_wizard_omada_typed_in(qapp, manager, no_popups):
+    from catflap import keys
+    _, srv_pub = keys.generate_keypair()
+    w = ui_wizards.SiteWizard(manager)
+    w.show()
+    pick(w, "omada")
+    assert w.currentId() == ui_wizards.P_METHOD
+    assert w.currentPage().manual.isChecked()
     w.next()
-    name = w.currentPage()
-    name.name.setText("Cabin")
+    mp = w.currentPage()
+    assert "Settings → VPN → WireGuard" in mp.help.toPlainText().replace("->", "→")
+    mp.server_key.setText(srv_pub)
+    mp.endpoint.setText("cabin.tplinkdns.com")
+    mp.address.setText("10.250.3.2")
+    w.next()
+    assert w.currentId() == ui_wizards.P_SITE_NETS, no_popups
+    nets = w.currentPage()
+    nets.new.setText("192.168.50.0")
+    nets._add()
+    assert nets.chosen() == ["192.168.50.0/24"]
+    w.next()
+    w.currentPage().name.setText("Cabin")
     w.next()
     assert w.currentId() == ui_wizards.P_DONE, no_popups
     p = w.result.profile
-    assert p.vendor == "omada" and p.routes == ["10.20.0.0/24"] and p.label == "Cabin"
+    assert p.vendor == "omada" and p.routes == ["192.168.50.0/24"] and p.addresses == ["10.250.3.2/32"]
+    assert p.endpoint_host == "cabin.tplinkdns.com"
 
 
-def test_site_wizard_rejects_duplicate_name_and_bad_file(qapp, manager, no_popups, tmp_path):
+def test_site_wizard_alta_file(qapp, manager, no_popups, unifi_conf):
+    w = ui_wizards.SiteWizard(manager)
+    w.show()
+    pick(w, "alta")
+    assert w.currentId() == ui_wizards.P_FILE
+    fp = w.currentPage()
+    assert "manage.alta.inc" in fp.help.toPlainText()
+    fp.path.setText(str(unifi_conf))
+    w.next()
+    nets = w.currentPage()
+    assert nets.chosen() == []               # the file only had a full tunnel; nothing pre-ticked
+    assert not w.button(QtWidgets.QWizard.NextButton).isEnabled()
+    nets.new.setText("10.20.0.0/24")
+    nets._add()
+    w.next()
+    w.currentPage().name.setText("Lake house")
+    w.next()
+    assert w.currentId() == ui_wizards.P_DONE, no_popups
+    assert w.result.profile.routes == ["10.20.0.0/24"]
+
+
+def test_site_wizard_rejects_bad_file(qapp, manager, no_popups, tmp_path):
     bad = tmp_path / "x.conf"
     bad.write_text("not a wireguard file")
     w = ui_wizards.SiteWizard(manager)
     w.show()
-    vp = w.page(ui_wizards.P_VENDOR)
-    next(b for b in vp.group.buttons() if b.property("vendor") == "generic").setChecked(True)
-    w.next()
-    fp = w.currentPage()
-    fp.path.setText(str(bad))
-    fp.router.setText("10.20.0.1")
+    pick(w, "alta")
+    w.currentPage().path.setText(str(bad))
     w.next()
     assert w.currentId() == ui_wizards.P_FILE
     assert any("doesn't look like a WireGuard" in m for _, m in no_popups)
 
 
-def test_gateway_wizard(qapp, manager, no_popups):
+def test_gateway_wizard_cloud_single_console(qapp, manager, no_popups, monkeypatch):
+    from catflap.drivers import unifi
+    monkeypatch.setattr(unifi, "list_cloud_consoles", lambda key: CONSOLES[:1])
     w = ui_wizards.GatewayWizard(manager)
     w.show()
     w.next()
-    w.login.address.setText("https://10.0.0.1/")
-    w.login.key.setText("K2")
-    assert w.login.validatePage()
-    assert manager.store.gateway(w.gateway)["url"] == "https://10.0.0.1"
+    w.access_page.key.setText("K2")
+    assert w.access_page.validatePage()
+    assert manager.store.gateway(w.gateway)["options"]["console_id"] == "AA:11"
+    # adding the same console again reuses it
+    assert manager.add_unifi_cloud_gateway("K3", "AA:11", "Home UDM") == w.gateway
 
 
 def test_update_dialog_flatpak_manual_then_restart(qapp, monkeypatch, tmp_path):

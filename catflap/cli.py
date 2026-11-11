@@ -127,7 +127,57 @@ def cmd_update(m: Manager, a, out: Out) -> int:
     return EXIT_OK if res.done else EXIT_ERR
 
 
+def _pick_console(consoles: list[dict], wanted: str | None) -> dict:
+    if wanted:
+        for c in consoles:
+            if wanted in (c["id"], c["name"]) or wanted.lower() == c["name"].lower():
+                return c
+        raise CatflapError(f"console {wanted!r} not found; available: "
+                           + ", ".join(f"{c['name']} ({c['id']})" for c in consoles))
+    if len(consoles) == 1:
+        return consoles[0]
+    raise CatflapError("this account has several consoles; pick one with --console: "
+                       + ", ".join(f"{c['name']} ({c['id']})" for c in consoles))
+
+
+def cmd_gateway_consoles(m: Manager, a, out: Out) -> int:
+    from .drivers.unifi import list_cloud_consoles
+    key = read_secret("unifi.ui.com API key: ", "CATFLAP_API_KEY", a.api_key_stdin)
+    if not key:
+        out.say("An API key from unifi.ui.com (Settings > API Keys) is needed.")
+        return EXIT_USAGE
+    consoles = list_cloud_consoles(key)
+    out.put("consoles", consoles)
+    for c in consoles:
+        out.say(f"{c['name']:<28} {c['id']:<40} {c.get('model', '')}")
+    return EXIT_OK
+
+
 def cmd_gateway_add(m: Manager, a, out: Out) -> int:
+    if a.cloud:
+        if a.vendor != "unifi":
+            raise CatflapError("--cloud is only available for UniFi so far")
+        from .drivers.unifi import list_cloud_consoles
+        key = read_secret("unifi.ui.com API key: ", "CATFLAP_API_KEY", a.api_key_stdin)
+        if not key:
+            out.say("An API key from unifi.ui.com (Settings > API Keys) is needed.")
+            return EXIT_USAGE
+        c = _pick_console(list_cloud_consoles(key), a.console)
+        name = m.add_unifi_cloud_gateway(key, c["id"], c["name"])
+        if name != a.name and a.name not in m.store.gateways():
+            # keep the user's chosen name
+            m.store.put_gateway(a.name, m.store.gateway(name))
+            m.store.remove_gateway(name)
+            m.secrets.set(f"gateway/{a.name}/api_key", key)
+            m.secrets.delete(f"gateway/{name}/api_key")
+            m.store.save()
+            name = a.name
+        out.say(f"Gateway '{name}' = UniFi console '{c['name']}' through the UniFi cloud. "
+                f"Secrets stored in: {m.secrets.backend_name}")
+        out.put("gateway", {"name": name, **m.store.gateway(name)})
+        return EXIT_OK
+    if not a.url:
+        raise CatflapError("--url is required unless you use --cloud")
     fp = a.fingerprint
     if a.tofu:
         fp = fetch_fingerprint(a.url)
@@ -438,8 +488,14 @@ def build_parser() -> argparse.ArgumentParser:
     tls.add_argument("--ca-file", help="verify with this CA bundle")
     tls.add_argument("--insecure", action="store_true", help="do not verify TLS (not recommended)")
     p.add_argument("--legacy-controller", action="store_true", help="self-hosted UniFi Network Application (no UniFi OS)")
+    p.add_argument("--cloud", action="store_true",
+                   help="UniFi: reach the console through unifi.ui.com with an account API key")
+    p.add_argument("--console", help="with --cloud: console name or id (see 'gateway consoles')")
     p.add_argument("-y", "--yes", action="store_true")
     p.set_defaults(fn=cmd_gateway_add)
+    p = gs.add_parser("consoles", help="list the UniFi consoles on a unifi.ui.com account")
+    p.add_argument("--api-key-stdin", action="store_true")
+    p.set_defaults(fn=cmd_gateway_consoles)
     p = gs.add_parser("list", help="list gateways")
     p.set_defaults(fn=cmd_gateway_list)
     p = gs.add_parser("remove", help="remove a gateway and its stored credentials")

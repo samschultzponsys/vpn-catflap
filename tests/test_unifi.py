@@ -126,3 +126,43 @@ def test_allocate_address_skips_server_and_used():
     d, _ = make(base_routes())
     srv = d.get_wireguard_server(SITE)
     assert d.allocate_address(srv, ["10.250.1.2/32"]) == "10.250.1.3/32"
+
+
+def test_cloud_mode_uses_connector_and_key(monkeypatch):
+    from catflap.drivers import unifi
+    log = []
+    gw = GatewayConfig(name="g", vendor="unifi", url=unifi.cloud_url("CID"),
+                       options={"mode": "cloud", "console_id": "CID"})
+    d = UniFiDriver(gw, {"api_key": "CLOUDKEY"},
+                    client_factory=lambda gw, h: FakeClient(base_routes(), log, h))
+    assert gw.url == "https://api.ui.com/v1/connector/consoles/CID"
+    assert d.get_wireguard_server(SITE).port == 51820
+    assert all(h.get("X-API-KEY") == "CLOUDKEY" for *_, h in log)
+
+
+def test_cloud_401_does_not_ask_for_local_login():
+    r = base_routes()
+    r[("GET", "/proxy/network/api/s/default/rest/networkconf")] = HttpError(403, "insufficient permissions")
+    gw = GatewayConfig(name="g", vendor="unifi", url="https://api.ui.com/v1/connector/consoles/X",
+                       options={"mode": "cloud"})
+    d = UniFiDriver(gw, {"api_key": "K"}, client_factory=lambda gw, h: FakeClient(r, [], h))
+    with pytest.raises(DriverError, match="cloud connector"):
+        d.get_wireguard_server(SITE)
+
+
+def test_list_cloud_consoles():
+    from catflap.drivers import unifi
+    routes = {("GET", "/v1/hosts"): {"data": [
+        {"id": "AA:11", "type": "console", "reportedState": {"name": "Home UDM", "state": "connected"}},
+        {"id": "BB:22", "type": "console", "reportedState": {"hostname": "office-ucg"}},
+        {"id": "CC", "type": "protect-camera"}]}}
+    c = FakeClient(routes, [], {"X-API-KEY": "K"})
+    got = unifi.list_cloud_consoles("K", client=c)
+    assert [(h["id"], h["name"]) for h in got] == [("AA:11", "Home UDM"), ("BB:22", "office-ucg")]
+
+
+def test_list_cloud_consoles_bad_key():
+    from catflap.drivers import unifi
+    c = FakeClient({("GET", "/v1/hosts"): HttpError(401, "unauthorized")}, [], {})
+    with pytest.raises(DriverError, match="unifi.ui.com"):
+        unifi.list_cloud_consoles("bad", client=c)

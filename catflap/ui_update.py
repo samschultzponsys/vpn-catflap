@@ -9,7 +9,7 @@ itself into the new version; inside the Flatpak this uses the portal's
 from __future__ import annotations
 
 from . import update
-from .ui_common import app_icon, QtCore, QtGui, QtWidgets, Qt, friendly_error, make_pixmap, run_blocking
+from .ui_common import app_icon, QtCore, QtGui, QtWidgets, Qt, friendly_error, run_blocking
 from .version import __version__
 
 _Dialog = QtWidgets.QDialog if QtWidgets else object

@@ -1,4 +1,4 @@
-<img src="packaging/catflap.svg" alt="catflap icon" width="96" align="right">
+<img src="catflap/resources/catflap.svg" alt="catflap icon" width="96" align="right">
 
 # VPN CatFlap (`catflap`)
 
@@ -29,7 +29,7 @@ connection with safe defaults. It works with **UniFi**, **TP-Link Omada**,
 1. [Status by vendor and platform](#status-by-vendor-and-platform)
 2. [Install](#install)
 3. [Quick start](#quick-start)
-4. [Creating API keys per vendor](#creating-api-keys-per-vendor)
+4. [Setting up each brand](#setting-up-each-brand)
 5. [How-to guides](#how-to-guides)
 6. [Using the app](#using-the-app)
 7. [Command reference](#command-reference)
@@ -175,8 +175,8 @@ rules allow desktop users to manage their own connections.
 ### UniFi, fully automatic
 
 ```bash
-# 1. Add the gateway. You'll be asked for the API key; the TLS certificate gets pinned.
-catflap gateway add home --vendor unifi --url https://192.168.1.1 --tofu
+# 1. Add the console through the UniFi cloud. You'll be asked for the unifi.ui.com API key.
+catflap gateway add home --vendor unifi --cloud --console "Home UDM"
 
 # 2. See the site's networks.
 catflap gateway networks home --check-local
@@ -202,54 +202,107 @@ catflap up office
 catflap removes `0.0.0.0/0`, `::/0`, `DNS =` and IPv6 from the file, adds
 keepalive, gives the interface a safe name, and tells you what it changed.
 
-## Creating API keys per vendor
+## Setting up each brand
 
-API keys and passwords are stored **only on this PC**, in the system keyring
-(KWallet, GNOME Keyring or Windows Credential Manager). They never go into catflap's
-config files. They only leave the PC inside an [encrypted export](#move-catflap-to-another-pc)
-that you create yourself.
+catflap always ends up with a **WireGuard** connection on this computer. The
+brand decides how it gets there. Every route is also in the app's **Add a site**
+guide, step by step.
 
-### UniFi
+| Brand | How catflap reaches it | What you do |
+|---|---|---|
+| **UniFi** | **UniFi cloud** (unifi.ui.com Site Manager API, through Ubiquiti's cloud connector). Works from anywhere. | Paste one account API key, pick your console |
+| **TP-Link Omada** | No API yet (planned: Omada Open API). | Add this computer as a WireGuard peer, type 4 values back |
+| **Alta Labs** | No public API. | Download a WireGuard file for this computer, pick it |
+| **Other WireGuard routers** | — | A WireGuard file, or the typed-in route |
 
-1. In UniFi Network (9.0 or newer) open **Settings → Control Plane → Integrations**.
-2. Click **Create API Key**, give it a name (e.g. `catflap-laptop`) and copy the key.
-3. Run `catflap gateway add <name> --vendor unifi --url https://<console-ip> --tofu`
-   and paste the key when asked.
+### UniFi (automatic, through the cloud)
 
-The API key gives catflap the sites and networks. Reading the WireGuard server
-and creating clients uses UniFi's classic API. Recent consoles accept the same key
-there. If yours doesn't, add a **local** admin account (UniFi OS → Admins → add a
-local-access-only user; UI.com/SSO accounts are refused by the local API):
+catflap doesn't need your router's local address. It talks to the console
+through Ubiquiti's cloud, the same way unifi.ui.com does.
 
-```bash
-catflap gateway add home --vendor unifi --url https://192.168.1.1 --tofu --username catflap-svc
-```
+1. Sign in at [unifi.ui.com](https://unifi.ui.com) with the account that **owns** the
+   console. An admin who was only invited can't create the key.
+2. Open **Settings** (bottom of the left menu) → **API Keys**. On some accounts it's
+   **API** in the left menu.
+3. Click **Create API Key**, name it `catflap`, and copy it. It's shown only once.
+4. In catflap: **Add a site → UniFi → Through the UniFi cloud**, paste the key and
+   pick your console from the list.
 
-Self-hosted Network Application (no UniFi OS)? Add `--legacy-controller`.
-
-**Before you provision:** the site needs a WireGuard server. Go to **Settings → VPN →
-VPN Server → Create New → WireGuard** and **click Create / Apply Changes**. catflap
-checks for this and refuses to continue until the server exists (problem #1).
-
-### TP-Link Omada
-
-API provisioning is planned. Today: Omada controller → **Settings → VPN →
-WireGuard**, create a peer for this device, export its config and run
-`catflap import <file> <name> --vendor omada --route <cidr>`. To prepare for API
-support, create an Open API app under **Global View → Settings → Platform
-Integration → Open API** (client-credentials mode) and keep the client ID and secret.
-
-### Alta Labs
-
-API provisioning is planned. Today: in the Alta Labs portal create a WireGuard
-client for this device, download its config and run
-`catflap import <file> <name> --vendor alta --route <cidr>`.
-
-### Generic WireGuard
+From the command line:
 
 ```bash
-catflap import <file> <name> --route <cidr>
+catflap gateway consoles
 ```
+
+```bash
+catflap gateway add home --vendor unifi --cloud --console "Home UDM"
+```
+
+**Which key is which:**
+- **Account key (unifi.ui.com, used above):** covers every console you own,
+  including multi-site setups managed from unifi.ui.com. The console must show as
+  **Online** there (Remote Management on).
+- **Console key (UniFi Network → Settings → Control Plane → Integrations):** only
+  works on that console's own network. Use it with **Directly** in the guide, or
+  `catflap gateway add … --url https://<console address>`.
+
+**Before adding a site,** the console needs a WireGuard server: **Settings → VPN →
+VPN Server → Create New → WireGuard**, then **Create / Apply Changes**. The guide
+checks for this and shows these steps if it's missing (problem #1).
+
+**How it works:**
+- catflap uses UniFi's official API for sites and networks. For the WireGuard
+  server and its clients, it uses UniFi's internal API through the same cloud
+  connector.
+- If Ubiquiti ever limits the connector to the official API (it did briefly in
+  November 2026), catflap says so. You can then use **"UniFi, but I'd rather use a
+  downloaded WireGuard file"** in the guide.
+
+### TP-Link Omada (typed in)
+
+Omada's WireGuard doesn't hand out a configuration file. Instead:
+
+1. **Add a site → TP-Link Omada → Type the details.** catflap creates this
+   computer's keys and shows its **public key**.
+2. In your Omada controller (5.9 or later, or Omada Central), open the site →
+   **Settings → VPN → WireGuard**:
+   - If there's no WireGuard VPN yet: **Create New**, keep listen port **51820**,
+     and set **Local IP Address** to a range just for the VPN, e.g. `10.250.1.1`.
+     Copy its **Public Key**.
+   - **Peers → Create New:** paste this computer's public key, set **Allowed
+     Address** to e.g. `10.250.1.2/32`, set **Persistent Keepalive** to 25, and save.
+3. Back in catflap, enter:
+   - the router's public key
+   - the site's internet address (your Dynamic DNS name from **Settings → Services →
+     Dynamic DNS**, or the WAN IP)
+   - the port
+   - this computer's VPN address (`10.250.1.2`)
+4. Tick or add the networks to reach. You'll find them under **Settings → Wired
+   Networks → LAN**.
+
+Menu names can differ slightly between Omada versions. Automatic setup through
+the **Omada Open API** is being added next. It will use **Settings → Platform
+Integration → Open API** (Client ID, Client Secret, Omada ID). On Omada Central,
+that needs the Standard tier; Essentials has no Open API.
+
+### Alta Labs (file)
+
+Alta Labs doesn't publish an API, so catflap uses a file (Route10, Control 1.0q
+or later):
+
+1. Sign in at [manage.alta.inc](https://manage.alta.inc) → your site → your
+   **Route10** → **VPN** tab.
+2. Turn on the **WireGuard server**.
+3. Add a **user profile** for this computer (one per device), then download its
+   WireGuard configuration.
+4. In catflap: **Add a site → Alta Labs**, pick the file, and add the networks to
+   reach.
+
+### Other WireGuard routers
+
+**Add a site → Another WireGuard router**, then either:
+- **pick a WireGuard file** made for this computer, or
+- **type the details**, as for Omada.
 
 ## How-to guides
 
@@ -394,27 +447,32 @@ You can run the setup guide again from **Help → Setup guide…**.
 menu. The guide asks one thing at a time:
 
 1. **What kind of router is at the site?** UniFi, TP-Link Omada, Alta Labs, or
-   another WireGuard router / a `.conf` file. If you've already added a UniFi
-   router, you can pick it.
+   another WireGuard router. If you've already added a UniFi console, you can
+   pick it.
 2. **UniFi (automatic):**
-   - **Router address and API key.** The page explains where to create the key.
-     catflap tests the connection before moving on. The key is saved only in
-     this computer's keyring. *More options* holds a local admin login and the
-     self-hosted controller setting, needed only if catflap asks for them.
-   - **Which site** (if your console manages several).
-   - **VPN server check.** If the router has no WireGuard server yet, or it was
-     never applied, the page shows exactly what to click in UniFi and has a
-     **Check again** button. It also warns in plain words about CGNAT or a
-     second router in front.
+   - **Connect to UniFi:** *Through the UniFi cloud* (default) with the exact
+     steps to create a unifi.ui.com API key, or *Directly* when you're on the
+     console's network. No router address is needed for the cloud.
+   - **Which console?** A list of the consoles on your account.
+   - **Which site?** If the console manages several.
+   - **VPN server check.** If the console has no WireGuard server yet, or it was
+     never applied, the page shows exactly what to click and has a **Check
+     again** button. It also warns in plain words about CGNAT or a second router
+     in front.
    - **What do you want to reach?** Tick the networks. Networks that clash with
      the one you're on now are marked.
-3. **Omada / Alta Labs / other (file):** the page says where to download the
-   WireGuard file on that router. Then pick the file and type the router's
-   address at the site (e.g. `192.168.1.1`). Under *More options* you can add
-   extra networks and a DDNS name.
-4. **Name and colour:** e.g. "Home", "Mum's house". The colour is used by the tray
+3. **TP-Link Omada / other: type the details.** catflap shows this computer's
+   public key and the exact steps to add it as a WireGuard peer on the router.
+   You type back four values: the router's public key, the site's internet
+   address, the port, and this computer's VPN address.
+4. **Alta Labs / other: pick a WireGuard file.** The page says exactly where to
+   get it for that brand.
+5. **What do you want to reach?** (Omada / Alta / other) Networks from the file
+   are pre-ticked. Add others as e.g. `192.168.1.0/24`; the page says where to
+   find them for that brand.
+6. **Name and colour:** e.g. "Home", "Mum's house". The colour is used by the tray
    icon while connected. Tick *Connect as soon as it's set up* if you like.
-5. **Done:** a summary of what was set up and how it's kept safe.
+7. **Done:** a summary of what was set up and how it's kept safe.
 
 **Add a gateway…** (File menu, or the Gateways tab in Advanced) adds a UniFi
 router without adding a site yet.
@@ -477,7 +535,8 @@ Exit codes: `0` ok, `1` error, `2` usage, `3` checks failed.
 |---|---|
 | `catflap version` | Version and install method |
 | `catflap update [--check] [-y]` | Check for a new release; update automatically or show how |
-| `catflap gateway add NAME --vendor {unifi,omada,alta,generic} [--url URL] [--tofu \| --fingerprint FP \| --ca-file F \| --insecure] [--api-key-stdin] [--username U] [--password-stdin] [--legacy-controller]` | Add or update a gateway |
+| `catflap gateway add NAME --vendor {unifi,omada,alta,generic} [--cloud [--console C]] [--url URL] [--tofu \| --fingerprint FP \| --ca-file F \| --insecure] [--api-key-stdin] [--username U] [--password-stdin] [--legacy-controller]` | Add or update a gateway |
+| `catflap gateway consoles` | List the UniFi consoles on a unifi.ui.com account |
 | `catflap gateway list` | List gateways |
 | `catflap gateway remove NAME` | Remove a gateway and its stored credentials |
 | `catflap gateway set-key NAME [--password] [--stdin]` | Replace the stored API key or password |

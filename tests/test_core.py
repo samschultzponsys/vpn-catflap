@@ -158,3 +158,15 @@ def test_store_reloads_external_changes_only(tmp_path):
     b.settings()["y"] = 2          # unsaved in-memory change survives a no-op reload
     b.reload()
     assert b.settings()["y"] == 2
+
+
+def test_manual_peer_for_routers_without_files(manager, backend):
+    priv, pub = keys.generate_keypair()
+    srv_priv, srv_pub = keys.generate_keypair()
+    cfg = manager.manual_peer(priv, srv_pub, "cabin.example.net", 51820, "10.250.3.2")
+    res = manager.import_peer(cfg, "cabin", vendor="omada", routes=["192.168.50.0/24"], label="Cabin")
+    p = res.profile
+    assert p.addresses == ["10.250.3.2/32"] and p.routes == ["192.168.50.0/24"]
+    assert p.endpoint_host == "cabin.example.net" and backend.installed["cabin"].keepalive == 25
+    with pytest.raises(CatflapError, match="public key"):
+        manager.manual_peer(priv, "nope", "x", 51820, "10.0.0.2")

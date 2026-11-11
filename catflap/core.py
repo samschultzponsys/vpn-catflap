@@ -80,6 +80,22 @@ class Manager:
         self.store.save()
         return gw
 
+    def add_unifi_cloud_gateway(self, api_key: str, console_id: str, console_name: str = "") -> str:
+        """Save a UniFi console reached through unifi.ui.com's cloud connector.
+
+        Re-adding the same console updates its key instead of duplicating it.
+        """
+        from .drivers.unifi import cloud_url
+        for n, g in self.store.gateways().items():
+            if (g.get("options") or {}).get("console_id") == console_id:
+                self.secrets.set(gateway_key(n, "api_key"), api_key)
+                return n
+        name = self.unique_gateway_name(f"unifi-{console_name or console_id}")
+        self.add_gateway(name, "unifi", cloud_url(console_id), api_key=api_key,
+                         options={"mode": "cloud", "console_id": console_id,
+                                  "console_name": console_name})
+        return name
+
     def remove_gateway(self, name: str) -> None:
         users = [p.name for p in self.store.profiles().values() if p.gateway == name]
         if users:
@@ -288,15 +304,49 @@ class Manager:
                     dns_servers: list[str] | None = None, replace: bool = False,
                     install: bool = True, color: str | None = None,
                     label: str | None = None) -> Outcome:
-        existing = self._check_new_name(name, replace)
         if gateway:
             drv = self.driver(gateway)
             vendor = drv.vendor
         else:
             drv = get_driver_class(vendor)(GatewayConfig(name="", vendor=vendor), {})
         cfg = drv.parse_config(path)
+        return self.import_peer(cfg, name, vendor=vendor, routes=routes, networks=networks,
+                                gateway=gateway, site=site, endpoint=endpoint,
+                                dns_domain=dns_domain, dns_servers=dns_servers, replace=replace,
+                                install=install, color=color, label=label, _driver=drv)
+
+    def manual_peer(self, private_key: str, server_public_key: str, endpoint: str, port: int,
+                    address: str) -> PeerConfig:
+        """Build a peer from details typed in by the user (routers without config files)."""
+        ip = address.strip()
+        if "/" not in ip:
+            ip += "/32"
+        try:
+            netutil.net(ip)
+        except ValueError:
+            raise CatflapError(f"'{address}' isn't a valid IP address for this computer") from None
+        if not keys.is_valid_key(server_public_key.strip()):
+            raise CatflapError("the router's public key doesn't look right: it should be 44 "
+                               "characters ending in '='")
+        if not endpoint.strip():
+            raise CatflapError("enter the site's internet address or DDNS name")
+        return PeerConfig(private_key=private_key, addresses=[ip],
+                          peer_public_key=server_public_key.strip(),
+                          endpoint_host=endpoint.strip(), endpoint_port=int(port), allowed_ips=[])
+
+    def import_peer(self, cfg: PeerConfig, name: str, vendor: str = "generic",
+                    routes: list[str] | None = None, networks: list[str] | None = None,
+                    gateway: str | None = None, site: str | None = None,
+                    endpoint: str | None = None, dns_domain: str | None = None,
+                    dns_servers: list[str] | None = None, replace: bool = False,
+                    install: bool = True, color: str | None = None,
+                    label: str | None = None, _driver: Driver | None = None) -> Outcome:
+        """Create a site from a WireGuard peer config (parsed from a file or typed in)."""
+        existing = self._check_new_name(name, replace)
+        drv = _driver or (self.driver(gateway) if gateway else
+                          get_driver_class(vendor)(GatewayConfig(name="", vendor=vendor), {}))
         if not keys.is_valid_key(cfg.private_key) or not keys.is_valid_key(cfg.peer_public_key):
-            raise CatflapError("the .conf has an invalid PrivateKey or peer PublicKey")
+            raise CatflapError("the WireGuard config has an invalid PrivateKey or peer PublicKey")
 
         # One client per device (#11): the same key must not be imported twice.
         my_pub = keys.public_from_private(cfg.private_key)

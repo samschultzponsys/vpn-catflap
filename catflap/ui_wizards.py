@@ -2,12 +2,17 @@
 
 * :class:`FirstRunWizard` - welcome, pick Basic or Advanced (with live previews),
   offer to add the first site.
-* :class:`SiteWizard` - "I want to reach a site": UniFi automatic setup with an
-  API key, or a downloaded WireGuard file for Omada, Alta Labs and others.
-* :class:`GatewayWizard` - add a UniFi router (API key) without adding a site yet.
+* :class:`SiteWizard` - "I want to reach a site", with exact steps per brand:
+  - UniFi: automatic, through the UniFi cloud (one account API key from
+    unifi.ui.com, pick the console) or directly on the local network;
+  - TP-Link Omada / other routers: catflap creates this computer's keys, you add
+    it as a WireGuard peer on the router and type a few values back;
+  - Alta Labs / other: pick a WireGuard file downloaded from the router.
+* :class:`GatewayWizard` - add a UniFi console without adding a site yet.
 
-All work goes through :class:`catflap.core.Manager`; network calls run in the
-background behind a "please wait" dialog.
+Whatever the route, the result is a WireGuard connection with catflap's safe
+defaults. All work goes through :class:`catflap.core.Manager`; network calls run
+in the background behind a "please wait" dialog.
 """
 
 from __future__ import annotations
@@ -15,68 +20,125 @@ from __future__ import annotations
 import ipaddress
 import os
 from pathlib import Path
-from typing import Any
 from urllib.parse import urlsplit
 
-from . import netutil
+from . import keys, netutil
 from .core import Manager
 from .drivers import get_driver_class
 from .drivers.base import GatewayConfig
 from .http import fetch_fingerprint
-from .ui_common import (app_icon, PALETTE, QtCore, QtGui, QtWidgets, Qt, friendly_error, make_pixmap,
+from .ui_common import (app_icon, PALETTE, QtWidgets, Qt, friendly_error,
                         run_bg, run_blocking)
 
 _Wizard = QtWidgets.QWizard if QtWidgets else object
 _Page = QtWidgets.QWizardPage if QtWidgets else object
 
+
+# ---------------------------------------------------------------- what each brand offers
 VENDORS = [
-    ("unifi", "UniFi (Ubiquiti)", "Automatic setup. You'll paste an API key from your UniFi "
-                                  "console and catflap does the rest."),
-    ("omada", "TP-Link Omada", "You'll download a small WireGuard file from your Omada "
-                               "controller and pick it here."),
-    ("alta", "Alta Labs", "You'll download a small WireGuard file from the Alta Labs portal "
+    ("unifi", "UniFi (Ubiquiti)", "Automatic setup through the UniFi cloud (unifi.ui.com): you "
+                                  "paste one API key and pick your console. Works from anywhere."),
+    ("omada", "TP-Link Omada", "You add this computer as a WireGuard peer in your Omada "
+                               "controller and type a few details here. Step-by-step help included."),
+    ("alta", "Alta Labs", "You download a WireGuard file for this computer from manage.alta.inc "
                           "and pick it here."),
-    ("generic", "Another router, or I already have a WireGuard file",
-     "Any router with a WireGuard VPN server. You'll pick the .conf file it gave you."),
+    ("generic", "Another WireGuard router", "Use a WireGuard file from your router, or type its "
+                                            "details."),
 ]
 
-UNIFI_KEY_HELP = """
-<b>How to get an API key</b> (one time, takes a minute):
+UNIFI_CLOUD_HELP = """
+<p><b>Get a UniFi cloud API key</b> (one time, about a minute, from any computer):</p>
 <ol>
-<li>Open your UniFi console in a web browser, for example <i>https://192.168.1.1</i>
-    or <i>unifi.ui.com</i>.</li>
-<li>Go to <b>Settings → Control Plane → Integrations</b>.</li>
-<li>Click <b>Create API Key</b>, call it <i>catflap</i>, and copy the key.</li>
+<li>Sign in at <a href="https://unifi.ui.com">unifi.ui.com</a> with the UniFi account that
+    <b>owns</b> the console. An admin who was only invited to the console can't create this key.</li>
+<li>Open <b>Settings</b> (bottom of the left menu) → <b>API Keys</b>. On some accounts it's
+    called <b>API</b> in the left menu.</li>
+<li>Click <b>Create API Key</b>, name it <i>catflap</i>, and <b>copy</b> it. It's shown only once.</li>
 <li>Paste it below.</li>
 </ol>
-The key is saved only on this computer, in your system keyring.
+<p><small>This is an <b>account</b> key: it covers every console you own, and catflap reaches
+them through Ubiquiti's cloud, so you don't need to be at the site. Your console must show as
+<b>Online</b> on unifi.ui.com (Remote Management on). The key is saved only on this computer, in
+your keyring.<br>
+Not the same as the <i>console</i> key under UniFi Network → Settings → Control Plane →
+Integrations: that one only works on the console's own network (choose <i>Directly</i> below).
+</small></p>
+"""
+
+UNIFI_DIRECT_HELP = """
+<p><b>Direct access</b> only works while this computer is on the same network as the console
+(for example, at the site). In UniFi Network go to <b>Settings → Control Plane →
+Integrations</b>, click <b>Create API Key</b>, copy it, and paste it below with the console's
+address on that network.</p>
 """
 
 UNIFI_SERVER_HELP = """
-<b>Your router doesn't have a WireGuard VPN server yet.</b> Create one (one time):
+<b>Your UniFi console doesn't have a WireGuard VPN server yet.</b> Create one (one time):
 <ol>
-<li>In your UniFi console go to <b>Settings → VPN → VPN Server</b>.</li>
-<li>Click <b>Create New</b> and choose <b>WireGuard</b>.</li>
-<li>Click <b>Create</b> / <b>Apply Changes</b>. This step is easy to miss: without
-    it the VPN never works.</li>
+<li>Open your console on <a href="https://unifi.ui.com">unifi.ui.com</a> → <b>Network</b>.</li>
+<li>Go to <b>Settings → VPN → VPN Server</b>.</li>
+<li>Click <b>Create New</b> and choose <b>WireGuard</b>. Keep the suggested port (51820).</li>
+<li>Click <b>Create</b> / <b>Apply Changes</b>. This step is easy to miss: without it the VPN
+    never works.</li>
 <li>Come back here and click <b>Check again</b>.</li>
 </ol>
 """
 
 FILE_HELP = {
-    "unifi": "In your UniFi console: <b>Settings → VPN → VPN Server</b>, open your WireGuard "
-             "server (make sure it has been created and applied), <b>add a client</b> for this "
-             "computer and <b>download</b> its configuration file.",
-    "omada": "In your Omada controller: <b>Settings → VPN → WireGuard</b>, add a <b>peer</b> "
-             "for this computer and <b>export / download</b> its configuration file. "
-             "(Menu names can differ slightly between controller versions.)",
-    "alta": "In the Alta Labs portal, open your site's <b>WireGuard VPN</b>, add a <b>client</b> "
-            "for this computer and <b>download</b> its configuration file.",
-    "generic": "In your router's VPN settings, create a <b>WireGuard client / peer</b> for this "
-               "computer and download its configuration (a file ending in <b>.conf</b>).",
+    "unifi": """<p><b>Get a WireGuard file from UniFi:</b></p><ol>
+<li>Open your console on <a href="https://unifi.ui.com">unifi.ui.com</a> → <b>Network</b> →
+    <b>Settings → VPN → VPN Server</b>.</li>
+<li>Open your <b>WireGuard</b> server (create it and click <b>Apply Changes</b> first if there
+    isn't one).</li>
+<li>Click <b>Add Client</b>, name it after this computer, and <b>Download</b> its configuration
+    file.</li></ol>""",
+    "alta": """<p><b>Get a WireGuard file from Alta Labs</b> (Route10, Control 1.0q or later):</p><ol>
+<li>Sign in at <a href="https://manage.alta.inc">manage.alta.inc</a> and open your site.</li>
+<li>Select your <b>Route10</b> and open its <b>VPN</b> tab.</li>
+<li>Turn on the <b>WireGuard server</b> if it's off, and save.</li>
+<li>Add a <b>user profile</b> for this computer (one per device), then download or export its
+    WireGuard configuration file (.conf).</li></ol>""",
+    "omada": """<p>Omada usually doesn't give you a file; choose <b>Type the details</b> instead.
+If you do have a WireGuard .conf for this computer, pick it here.</p>""",
+    "generic": """<p>In your router's VPN settings, create a <b>WireGuard client / peer</b> for this
+computer and download its configuration (a file ending in <b>.conf</b>).</p>""",
+}
+
+MANUAL_HELP = {
+    "omada": """<p><b>Add this computer to your Omada gateway</b> (Omada Controller 5.9 or later,
+or Omada Central; menu names can differ slightly between versions):</p><ol>
+<li>In your Omada controller, open the site and go to <b>Settings → VPN → WireGuard</b>.</li>
+<li>If there's no WireGuard VPN yet: click <b>Create New</b>, give it a name, keep
+    <b>Listen Port 51820</b>, set <b>Local IP Address</b> to a free private range just for the VPN
+    (for example <i>10.250.1.1</i>), and save. Copy its <b>Public Key</b>: that's the
+    <i>router's public key</i> below.</li>
+<li>Open the <b>Peers</b> tab → <b>Create New</b>: name it after this computer, choose the
+    WireGuard VPN above, paste <b>this computer's public key</b> (shown below), set
+    <b>Allowed Address</b> to this computer's VPN address with /32 (for example
+    <i>10.250.1.2/32</i>), set <b>Persistent Keepalive</b> to 25, and save.</li>
+<li>Fill in the details below. The site's internet address is your Dynamic DNS name
+    (<b>Settings → Services → Dynamic DNS</b>) or, if you don't use one, the gateway's WAN IP.</li>
+</ol>""",
+    "generic": """<p><b>Add this computer to your router as a WireGuard peer:</b></p><ol>
+<li>In your router's WireGuard settings, add a peer/client and paste <b>this computer's public
+    key</b> (below).</li>
+<li>Give it a VPN address (for example <i>10.250.1.2/32</i>) and copy the router's own
+    <b>public key</b> and <b>listen port</b>.</li>
+<li>Fill in the details below.</li></ol>""",
+}
+
+NETWORK_HELP = {
+    "unifi": "UniFi Network → <b>Settings → Networks</b> lists each network with its range "
+             "(for example <i>192.168.1.0/24</i>).",
+    "omada": "Omada controller → <b>Settings → Wired Networks → LAN</b> lists each network with its "
+             "gateway/subnet (for example <i>192.168.0.1/24</i> means <i>192.168.0.0/24</i>).",
+    "alta": "manage.alta.inc → your site → <b>Networks</b> shows each network's subnet.",
+    "generic": "Your router's LAN / network settings show the range (for example "
+               "<i>192.168.1.0/24</i>).",
 }
 
 P_VENDOR, P_LOGIN, P_SITE, P_SERVER, P_NETWORKS, P_FILE, P_NAME, P_DONE = range(8)
+P_CONSOLE, P_METHOD, P_MANUAL, P_SITE_NETS = range(8, 12)
 
 
 def _title(text: str) -> "QtWidgets.QLabel":
@@ -182,22 +244,27 @@ class FirstRunWizard(_Wizard):
 
 
 # ============================================================ add a site
+
+
+# ============================================================ add a site
 class VendorPage(_Page):
     def __init__(self, wiz: "SiteWizard"):
         super().__init__()
         self.wiz = wiz
         self.setTitle("What kind of router is at the site?")
-        self.setSubTitle("This is the router or gateway with the VPN server you want to connect to.")
+        self.setSubTitle("The router or gateway at the place you want to reach.")
         lay = QtWidgets.QVBoxLayout(self)
         self.group = QtWidgets.QButtonGroup(self)
         self.existing = QtWidgets.QComboBox()
         unifi_gws = [n for n, g in wiz.m.store.gateways().items() if g.get("vendor") == "unifi"]
         if unifi_gws:
-            rb = QtWidgets.QRadioButton("A UniFi router I've already added")
+            rb = QtWidgets.QRadioButton("A UniFi console I've already added")
             rb.setProperty("vendor", "existing")
             self.group.addButton(rb)
             lay.addWidget(rb)
-            self.existing.addItems(unifi_gws)
+            for n in unifi_gws:
+                opts = wiz.m.store.gateways()[n].get("options") or {}
+                self.existing.addItem(opts.get("console_name") or n, n)
             row = QtWidgets.QHBoxLayout()
             row.addSpacing(24)
             row.addWidget(self.existing, 1)
@@ -216,7 +283,7 @@ class VendorPage(_Page):
             lay.addWidget(d)
             if key == "unifi" and not unifi_gws:
                 rb.setChecked(True)
-        self.use_file = QtWidgets.QCheckBox("UniFi, but I'd rather pick a downloaded WireGuard file")
+        self.use_file = QtWidgets.QCheckBox("UniFi, but I'd rather use a downloaded WireGuard file")
         lay.addWidget(self.use_file)
         lay.addStretch(1)
         self.group.buttonToggled.connect(lambda *_: self.use_file.setVisible(self.choice == "unifi"))
@@ -227,40 +294,49 @@ class VendorPage(_Page):
         return b.property("vendor") if b else "unifi"
 
     def validatePage(self) -> bool:  # noqa: N802 (Qt API)
-        self.wiz.vendor = "unifi" if self.choice == "existing" else self.choice
-        self.wiz.conf_path = None
+        w = self.wiz
+        w.vendor = "unifi" if self.choice == "existing" else self.choice
+        w.conf_path = None
+        w.manual_cfg = None
+        w.file_routes = []
         if self.choice == "existing":
-            self.wiz.gateway = self.existing.currentText()
-            self.wiz.sites = []
+            w.gateway = self.existing.currentData()
+            w.sites = []
         return True
 
     def nextId(self) -> int:  # noqa: N802 (Qt API)
         c = self.choice
         if c == "existing":
             return P_SITE
-        if c == "unifi" and not self.use_file.isChecked():
-            return P_LOGIN
-        return P_FILE
+        if c == "unifi":
+            return P_FILE if self.use_file.isChecked() else P_LOGIN
+        if c == "alta":
+            return P_FILE
+        return P_METHOD
 
 
-class LoginPage(_Page):
-    """UniFi console address + API key; tested before moving on."""
+class UnifiAccessPage(_Page):
+    """UniFi: cloud (account API key, pick a console) or direct (address + console key)."""
 
-    def __init__(self, wiz: "_GatewayMixin", final: bool = False):
+    def __init__(self, wiz, final: bool = False):
         super().__init__()
         self.wiz = wiz
         self.final = final
-        self.setTitle("Connect to your UniFi console")
-        self.setSubTitle("Do this while you're at the site (or can otherwise reach the router).")
+        self.consoles: list[dict] = []
+        self.setTitle("Connect to UniFi")
+        self.setSubTitle("catflap uses your UniFi account to find your console and set up the VPN.")
         lay = QtWidgets.QVBoxLayout(self)
-        help_ = QtWidgets.QTextBrowser()
-        help_.setHtml(UNIFI_KEY_HELP)
-        help_.setOpenExternalLinks(True)
-        help_.setMaximumHeight(190)
-        lay.addWidget(help_)
+        row = QtWidgets.QHBoxLayout()
+        self.cloud = QtWidgets.QRadioButton("Through the UniFi cloud (recommended, works from anywhere)")
+        self.direct = QtWidgets.QRadioButton("Directly (only while I'm on the console's network)")
+        self.cloud.setChecked(True)
+        row.addWidget(self.cloud)
+        row.addWidget(self.direct)
+        lay.addLayout(row)
+        self.help = QtWidgets.QTextBrowser()
+        self.help.setOpenExternalLinks(True)
+        lay.addWidget(self.help, 1)
         form = QtWidgets.QFormLayout()
-        self.address = QtWidgets.QLineEdit()
-        self.address.setPlaceholderText("192.168.1.1")
         self.key = QtWidgets.QLineEdit()
         self.key.setEchoMode(QtWidgets.QLineEdit.Password)
         self.key.setPlaceholderText("paste the API key here")
@@ -270,45 +346,58 @@ class LoginPage(_Page):
         keyrow = QtWidgets.QHBoxLayout()
         keyrow.addWidget(self.key, 1)
         keyrow.addWidget(show)
-        form.addRow("Router address", self.address)
+        self.address = QtWidgets.QLineEdit()
+        self.address.setPlaceholderText("the console's address on that network, e.g. 192.168.1.1")
+        self.address_label = QtWidgets.QLabel("Console address")
         form.addRow("API key", keyrow)
+        form.addRow(self.address_label, self.address)
         lay.addLayout(form)
-        self.more = QtWidgets.QCheckBox("More options (only if catflap asks for them)")
-        lay.addWidget(self.more)
-        self.more_box = QtWidgets.QWidget()
-        mf = QtWidgets.QFormLayout(self.more_box)
-        mf.setContentsMargins(24, 0, 0, 0)
-        self.user = QtWidgets.QLineEdit()
-        self.user.setPlaceholderText("a LOCAL UniFi admin, not your UI.com login")
-        self.pw = QtWidgets.QLineEdit()
-        self.pw.setEchoMode(QtWidgets.QLineEdit.Password)
-        self.legacy = QtWidgets.QCheckBox("Self-hosted UniFi Network Application (no UniFi OS)")
-        mf.addRow("Local admin username", self.user)
-        mf.addRow("Password", self.pw)
-        mf.addRow(self.legacy)
-        self.more_box.setVisible(False)
-        self.more.toggled.connect(self.more_box.setVisible)
-        lay.addWidget(self.more_box)
-        lay.addStretch(1)
-        self.address.textChanged.connect(self.completeChanged)
-        self.key.textChanged.connect(self.completeChanged)
-        self.user.textChanged.connect(self.completeChanged)
+        for w in (self.key, self.address):
+            w.textChanged.connect(self.completeChanged)
+        self.cloud.toggled.connect(self._mode)
+        self._mode()
+
+    def _mode(self) -> None:
+        cloud = self.cloud.isChecked()
+        self.help.setHtml(UNIFI_CLOUD_HELP if cloud else UNIFI_DIRECT_HELP)
+        self.address.setVisible(not cloud)
+        self.address_label.setVisible(not cloud)
+        self.completeChanged.emit()
 
     def isComplete(self) -> bool:  # noqa: N802 (Qt API)
-        return bool(self.address.text().strip()) and bool(self.key.text().strip() or self.user.text().strip())
+        if not self.key.text().strip():
+            return False
+        return self.cloud.isChecked() or bool(self.address.text().strip())
 
     def validatePage(self) -> bool:  # noqa: N802 (Qt API)
+        m, key = self.wiz.m, self.key.text().strip()
+        if self.cloud.isChecked():
+            from .drivers.unifi import list_cloud_consoles
+            try:
+                self.consoles = run_blocking(self, "Looking up your UniFi consoles…",
+                                             lambda: list_cloud_consoles(key))
+            except Exception as e:  # noqa: BLE001
+                QtWidgets.QMessageBox.warning(self, "Couldn't sign in to UniFi", friendly_error(e))
+                return False
+            if not self.consoles:
+                QtWidgets.QMessageBox.warning(
+                    self, "No consoles found",
+                    "That key works, but no UniFi consoles are linked to the account. Check that "
+                    "the console shows as Online on unifi.ui.com and that you signed in as its owner.")
+                return False
+            self.wiz.cloud_key = key
+            if len(self.consoles) == 1 and self.final:
+                c = self.consoles[0]
+                self.wiz.gateway = m.add_unifi_cloud_gateway(key, c["id"], c["name"])
+            return True
         url = normalize_url(self.address.text())
         host = urlsplit(url).hostname or ""
-        m = self.wiz.m
         existing = next((n for n, g in m.store.gateways().items() if g.get("url") == url), None)
         name = existing or m.unique_gateway_name(f"unifi-{host}")
 
         def work():
             fp = fetch_fingerprint(url) if url.startswith("https://") else None
-            m.add_gateway(name, "unifi", url, api_key=self.key.text().strip() or None,
-                          username=self.user.text().strip() or None, password=self.pw.text() or None,
-                          fingerprint=fp, options={"legacy_controller": True} if self.legacy.isChecked() else {})
+            m.add_gateway(name, "unifi", url, api_key=key, fingerprint=fp)
             try:
                 return m.list_sites(name)
             except Exception:
@@ -319,6 +408,52 @@ class LoginPage(_Page):
             sites = run_blocking(self, f"Connecting to {host}…", work)
         except Exception as e:  # noqa: BLE001
             QtWidgets.QMessageBox.warning(self, "Couldn't connect", friendly_error(e, host))
+            return False
+        self.wiz.gateway, self.wiz.sites = name, sites
+        self.consoles = []
+        return True
+
+    def nextId(self) -> int:  # noqa: N802 (Qt API)
+        if self.cloud.isChecked() and not (self.final and len(self.consoles) == 1):
+            return P_CONSOLE
+        return -1 if self.final else P_SITE
+
+
+class ConsolePage(_Page):
+    def __init__(self, wiz, final: bool = False):
+        super().__init__()
+        self.wiz = wiz
+        self.final = final
+        self.setTitle("Which console?")
+        self.setSubTitle("These are the UniFi consoles on your account.")
+        lay = QtWidgets.QVBoxLayout(self)
+        self.list = QtWidgets.QListWidget()
+        self.list.currentRowChanged.connect(lambda _r: self.completeChanged.emit())
+        lay.addWidget(self.list, 1)
+
+    def initializePage(self) -> None:  # noqa: N802 (Qt API)
+        self.list.clear()
+        for c in self.wiz.access_page.consoles:
+            label = c["name"] + (f"  ({c['model']})" if c.get("model") else "")
+            if not c.get("online", True):
+                label += "  - offline"
+            it = QtWidgets.QListWidgetItem(label)
+            it.setData(Qt.UserRole, c)
+            self.list.addItem(it)
+        self.list.setCurrentRow(0)
+
+    def isComplete(self) -> bool:  # noqa: N802 (Qt API)
+        return self.list.currentItem() is not None
+
+    def validatePage(self) -> bool:  # noqa: N802 (Qt API)
+        c = self.list.currentItem().data(Qt.UserRole)
+        m = self.wiz.m
+        name = m.add_unifi_cloud_gateway(self.wiz.cloud_key, c["id"], c["name"])
+        try:
+            sites = run_blocking(self, f"Connecting to {c['name']} through the UniFi cloud…",
+                                 lambda: m.list_sites(name))
+        except Exception as e:  # noqa: BLE001
+            QtWidgets.QMessageBox.warning(self, "Couldn't reach the console", friendly_error(e))
             return False
         self.wiz.gateway, self.wiz.sites = name, sites
         return True
@@ -492,14 +627,54 @@ class NetworksPage(_Page):
         return P_NAME
 
 
+
+
+class MethodPage(_Page):
+    """Omada / other: type the details (catflap makes the keys) or pick a WireGuard file."""
+
+    def __init__(self, wiz: "SiteWizard"):
+        super().__init__()
+        self.wiz = wiz
+        self.setTitle("How do you want to add it?")
+        lay = QtWidgets.QVBoxLayout(self)
+        self.manual = QtWidgets.QRadioButton("Type the details (catflap creates this computer's keys)")
+        self.file = QtWidgets.QRadioButton("Pick a WireGuard file (.conf) from the router")
+        for rb, desc in ((self.manual, "You add this computer as a WireGuard peer on the router "
+                                       "and copy a few values back here. Step-by-step help on the "
+                                       "next page."),
+                         (self.file, "If your router gave you a configuration file for this "
+                                     "computer.")):
+            f = rb.font()
+            f.setBold(True)
+            rb.setFont(f)
+            lay.addWidget(rb)
+            d = _title(f"<span style='color:palette(placeholder-text)'>{desc}</span>")
+            d.setContentsMargins(24, 0, 0, 8)
+            lay.addWidget(d)
+        self.note = _title("")
+        lay.addWidget(self.note)
+        lay.addStretch(1)
+
+    def initializePage(self) -> None:  # noqa: N802 (Qt API)
+        omada = self.wiz.vendor == "omada"
+        (self.manual if omada else self.file).setChecked(True)
+        self.note.setText(
+            "<small>Automatic Omada setup through the Omada Open API is being added; until then "
+            "this takes about two minutes by hand.</small>" if omada else "")
+
+    def nextId(self) -> int:  # noqa: N802 (Qt API)
+        return P_MANUAL if self.manual.isChecked() else P_FILE
+
+
 class FilePage(_Page):
     def __init__(self, wiz: "SiteWizard"):
         super().__init__()
         self.wiz = wiz
         self.setTitle("Pick the WireGuard file")
         lay = QtWidgets.QVBoxLayout(self)
-        self.help = _title("")
-        lay.addWidget(self.help)
+        self.help = QtWidgets.QTextBrowser()
+        self.help.setOpenExternalLinks(True)
+        lay.addWidget(self.help, 1)
         row = QtWidgets.QHBoxLayout()
         self.path = QtWidgets.QLineEdit()
         self.path.setPlaceholderText("…/Downloads/something.conf")
@@ -509,35 +684,16 @@ class FilePage(_Page):
         row.addWidget(browse)
         lay.addLayout(row)
         form = QtWidgets.QFormLayout()
-        self.router = QtWidgets.QLineEdit()
-        self.router.setPlaceholderText("e.g. 192.168.1.1")
-        form.addRow("Router's address at the site", self.router)
-        lay.addLayout(form)
-        lay.addWidget(_title("<small>This is the address you'd type in a browser at the site to "
-                             "reach the router. catflap routes that whole network (e.g. "
-                             "192.168.1.x) through the VPN, and nothing else.</small>"))
-        self.more = QtWidgets.QCheckBox("More options")
-        lay.addWidget(self.more)
-        self.more_box = QtWidgets.QWidget()
-        mf = QtWidgets.QFormLayout(self.more_box)
-        mf.setContentsMargins(24, 0, 0, 0)
-        self.extra = QtWidgets.QLineEdit()
-        self.extra.setPlaceholderText("e.g. 192.168.20.0/24, 10.0.0.0/24")
         self.endpoint = QtWidgets.QLineEdit()
-        self.endpoint.setPlaceholderText("e.g. myhome.ddns.net (optional)")
-        mf.addRow("More networks to reach", self.extra)
-        mf.addRow("Site's internet name (DDNS)", self.endpoint)
-        self.more_box.setVisible(False)
-        self.more.toggled.connect(self.more_box.setVisible)
-        lay.addWidget(self.more_box)
-        lay.addStretch(1)
-        for w in (self.path, self.router, self.extra):
-            w.textChanged.connect(self.completeChanged)
+        self.endpoint.setPlaceholderText("optional, e.g. myhome.ddns.net")
+        form.addRow("Site's internet name (if the file has an IP that changes)", self.endpoint)
+        lay.addLayout(form)
+        self.path.textChanged.connect(self.completeChanged)
 
     def initializePage(self) -> None:  # noqa: N802 (Qt API)
-        self.help.setText(FILE_HELP.get(self.wiz.vendor, FILE_HELP["generic"])
-                          + "<br><br>Then choose the downloaded file here. Use a separate file "
-                            "for each computer, so each one can be removed on its own later.")
+        self.help.setHtml(FILE_HELP.get(self.wiz.vendor, FILE_HELP["generic"])
+                          + "<p>Then choose the downloaded file below. Use a separate file for "
+                            "each computer, so each one can be removed on its own later.</p>")
 
     def _browse(self) -> None:
         start = str(Path.home() / "Downloads")
@@ -546,20 +702,8 @@ class FilePage(_Page):
         if f:
             self.path.setText(f)
 
-    def routes(self) -> list[str] | None:
-        out = []
-        try:
-            ip = ipaddress.ip_address(self.router.text().strip())
-            out.append(str(ipaddress.ip_network(f"{ip}/24", strict=False)))
-            for r in self.extra.text().replace(";", ",").split(","):
-                if r.strip():
-                    out.append(str(ipaddress.ip_network(r.strip(), strict=False)))
-        except ValueError:
-            return None
-        return out
-
     def isComplete(self) -> bool:  # noqa: N802 (Qt API)
-        return bool(self.path.text().strip()) and self.routes() is not None
+        return bool(self.path.text().strip())
 
     def validatePage(self) -> bool:  # noqa: N802 (Qt API)
         path = self.path.text().strip()
@@ -567,14 +711,151 @@ class FilePage(_Page):
             QtWidgets.QMessageBox.warning(self, "catflap", "That file doesn't exist.")
             return False
         try:
-            get_driver_class(self.wiz.vendor)(GatewayConfig(name="", vendor=self.wiz.vendor), {}).parse_config(path)
+            cfg = get_driver_class(self.wiz.vendor)(GatewayConfig(name="", vendor=self.wiz.vendor), {}).parse_config(path)
         except Exception as e:  # noqa: BLE001
             QtWidgets.QMessageBox.warning(self, "catflap", "That doesn't look like a WireGuard "
                                           f"configuration file:\n\n{friendly_error(e)}")
             return False
         self.wiz.conf_path = path
-        self.wiz.routes = self.routes() or []
+        self.wiz.manual_cfg = None
         self.wiz.endpoint = self.endpoint.text().strip() or None
+        self.wiz.file_routes = [r for r in cfg.allowed_ips
+                                if not netutil.is_default_route(r) and netutil.net(r).version == 4]
+        return True
+
+    def nextId(self) -> int:  # noqa: N802 (Qt API)
+        return P_SITE_NETS
+
+
+class ManualPage(_Page):
+    """Routers without config files: catflap makes the key pair, the user adds the peer."""
+
+    def __init__(self, wiz: "SiteWizard"):
+        super().__init__()
+        self.wiz = wiz
+        self.priv, self.pub = keys.generate_keypair()
+        self.setTitle("Add this computer to the router")
+        lay = QtWidgets.QVBoxLayout(self)
+        self.help = QtWidgets.QTextBrowser()
+        self.help.setOpenExternalLinks(True)
+        lay.addWidget(self.help, 1)
+        mine = QtWidgets.QHBoxLayout()
+        mine.addWidget(QtWidgets.QLabel("This computer's public key:"))
+        pub = QtWidgets.QLineEdit(self.pub)
+        pub.setReadOnly(True)
+        mine.addWidget(pub, 1)
+        copy = QtWidgets.QPushButton("Copy")
+        copy.clicked.connect(lambda: QtWidgets.QApplication.clipboard().setText(self.pub))
+        mine.addWidget(copy)
+        lay.addLayout(mine)
+        form = QtWidgets.QFormLayout()
+        self.server_key = QtWidgets.QLineEdit()
+        self.server_key.setPlaceholderText("the router's WireGuard public key (44 characters, ends in =)")
+        self.endpoint = QtWidgets.QLineEdit()
+        self.endpoint.setPlaceholderText("DDNS name or public IP, e.g. cabin.tplinkdns.com")
+        self.port = QtWidgets.QSpinBox()
+        self.port.setRange(1, 65535)
+        self.port.setValue(51820)
+        self.address = QtWidgets.QLineEdit()
+        self.address.setPlaceholderText("e.g. 10.250.1.2 (the Allowed Address you gave this computer)")
+        form.addRow("Router's public key", self.server_key)
+        form.addRow("Site's internet address", self.endpoint)
+        form.addRow("Port", self.port)
+        form.addRow("This computer's VPN address", self.address)
+        lay.addLayout(form)
+        for w in (self.server_key, self.endpoint, self.address):
+            w.textChanged.connect(self.completeChanged)
+
+    def initializePage(self) -> None:  # noqa: N802 (Qt API)
+        self.help.setHtml(MANUAL_HELP.get(self.wiz.vendor, MANUAL_HELP["generic"]))
+
+    def isComplete(self) -> bool:  # noqa: N802 (Qt API)
+        return all(w.text().strip() for w in (self.server_key, self.endpoint, self.address))
+
+    def validatePage(self) -> bool:  # noqa: N802 (Qt API)
+        try:
+            cfg = self.wiz.m.manual_peer(self.priv, self.server_key.text(), self.endpoint.text(),
+                                         self.port.value(), self.address.text().split("/")[0])
+        except Exception as e:  # noqa: BLE001
+            QtWidgets.QMessageBox.warning(self, "catflap", friendly_error(e))
+            return False
+        self.wiz.manual_cfg = cfg
+        self.wiz.conf_path = None
+        self.wiz.file_routes = []
+        return True
+
+    def nextId(self) -> int:  # noqa: N802 (Qt API)
+        return P_SITE_NETS
+
+
+class SiteNetworksPage(_Page):
+    """Which networks to reach, when they can't be read from the router's API."""
+
+    def __init__(self, wiz: "SiteWizard"):
+        super().__init__()
+        self.wiz = wiz
+        self.setTitle("What do you want to reach at the site?")
+        self.setSubTitle("Only these go through the VPN. Web browsing and everything else keeps "
+                         "using your normal internet.")
+        lay = QtWidgets.QVBoxLayout(self)
+        self.list = QtWidgets.QListWidget()
+        self.list.itemChanged.connect(lambda _i: self.completeChanged.emit())
+        lay.addWidget(self.list, 1)
+        row = QtWidgets.QHBoxLayout()
+        self.new = QtWidgets.QLineEdit()
+        self.new.setPlaceholderText("a network at the site, e.g. 192.168.1.0/24")
+        add = QtWidgets.QPushButton("Add")
+        add.clicked.connect(self._add)
+        self.new.returnPressed.connect(self._add)
+        row.addWidget(self.new, 1)
+        row.addWidget(add)
+        lay.addLayout(row)
+        self.help = _title("")
+        lay.addWidget(self.help)
+
+    def initializePage(self) -> None:  # noqa: N802 (Qt API)
+        self.list.clear()
+        for r in self.wiz.file_routes:
+            self._add_item(r, checked=True)
+        self.help.setText("<small>Where to find it: " + NETWORK_HELP.get(self.wiz.vendor, NETWORK_HELP["generic"])
+                          + "</small>")
+        self.completeChanged.emit()
+
+    def _add_item(self, cidr: str, checked: bool) -> None:
+        local = _local_routes(self.wiz.m)
+        text = cidr + ("   ⚠ same addresses as the network you're on now" if any(
+            netutil.overlaps(cidr, r) for r in local) else "")
+        it = QtWidgets.QListWidgetItem(text)
+        it.setData(Qt.UserRole, cidr)
+        it.setFlags(it.flags() | Qt.ItemIsUserCheckable)
+        it.setCheckState(Qt.Checked if checked else Qt.Unchecked)
+        self.list.addItem(it)
+
+    def _add(self) -> None:
+        raw = self.new.text().strip()
+        if not raw:
+            return
+        if "/" not in raw:
+            raw += "/24"
+        try:
+            cidr = str(ipaddress.ip_network(raw, strict=False))
+        except ValueError:
+            QtWidgets.QMessageBox.warning(self, "catflap", f"'{self.new.text()}' isn't a network "
+                                          "range like 192.168.1.0/24.")
+            return
+        self._add_item(cidr, checked=True)
+        self.new.clear()
+        self.completeChanged.emit()
+
+    def chosen(self) -> list[str]:
+        return [self.list.item(i).data(Qt.UserRole) for i in range(self.list.count())
+                if self.list.item(i).checkState() == Qt.Checked]
+
+    def isComplete(self) -> bool:  # noqa: N802 (Qt API)
+        return bool(self.chosen())
+
+    def validatePage(self) -> bool:  # noqa: N802 (Qt API)
+        self.wiz.routes = self.chosen()
         return True
 
     def nextId(self) -> int:  # noqa: N802 (Qt API)
@@ -635,7 +916,10 @@ class NamePage(_Page):
             return False
         name = m.unique_profile_name(label)
         color = self.colors.checkedButton().property("color")
-        if w.conf_path:
+        if w.manual_cfg is not None:
+            fn = lambda: m.import_peer(w.manual_cfg, name, vendor=w.vendor, routes=w.routes,  # noqa: E731
+                                       color=color, label=label)
+        elif w.conf_path:
             fn = lambda: m.import_conf(w.conf_path, name, vendor=w.vendor, routes=w.routes,  # noqa: E731
                                        endpoint=w.endpoint, color=color, label=label)
         else:
@@ -679,21 +963,20 @@ class DonePage(_Page):
         return -1
 
 
-class _GatewayMixin:
-    m: Manager
-
-
-class SiteWizard(_Wizard, _GatewayMixin):
+class SiteWizard(_Wizard):
     def __init__(self, manager: Manager, parent=None):
         super().__init__(parent)
         self.m = manager
         self.vendor = "unifi"
         self.gateway: str | None = None
+        self.cloud_key: str | None = None
         self.sites: list = []
         self.site = None
         self.networks: list = []
         self.routes: list[str] = []
+        self.file_routes: list[str] = []
         self.conf_path: str | None = None
+        self.manual_cfg = None
         self.endpoint: str | None = None
         self.result = None
         self.connect_after = False
@@ -701,24 +984,27 @@ class SiteWizard(_Wizard, _GatewayMixin):
         self.setWizardStyle(QtWidgets.QWizard.ModernStyle)
         self.setPixmap(QtWidgets.QWizard.LogoPixmap, app_icon().pixmap(56, 56))
         self.setOption(QtWidgets.QWizard.NoBackButtonOnLastPage, True)
-        self.resize(720, 560)
+        self.resize(760, 640)
+        self.access_page = UnifiAccessPage(self)
         self.pages = {
-            P_VENDOR: VendorPage(self), P_LOGIN: LoginPage(self), P_SITE: SitePage(self),
-            P_SERVER: ServerPage(self), P_NETWORKS: NetworksPage(self), P_FILE: FilePage(self),
-            P_NAME: NamePage(self), P_DONE: DonePage(self),
+            P_VENDOR: VendorPage(self), P_LOGIN: self.access_page, P_CONSOLE: ConsolePage(self),
+            P_SITE: SitePage(self), P_SERVER: ServerPage(self), P_NETWORKS: NetworksPage(self),
+            P_METHOD: MethodPage(self), P_FILE: FilePage(self), P_MANUAL: ManualPage(self),
+            P_SITE_NETS: SiteNetworksPage(self), P_NAME: NamePage(self), P_DONE: DonePage(self),
         }
         for pid, page in self.pages.items():
             self.setPage(pid, page)
         self.setStartId(P_VENDOR)
 
 
-class GatewayWizard(_Wizard, _GatewayMixin):
-    """Add a UniFi router (for automatic setup) without adding a site yet."""
+class GatewayWizard(_Wizard):
+    """Add a UniFi console (cloud or direct) without adding a site yet."""
 
     def __init__(self, manager: Manager, parent=None):
         super().__init__(parent)
         self.m = manager
         self.gateway: str | None = None
+        self.cloud_key: str | None = None
         self.sites: list = []
         self.setWindowTitle("Add a gateway")
         self.setWizardStyle(QtWidgets.QWizard.ModernStyle)
@@ -728,11 +1014,13 @@ class GatewayWizard(_Wizard, _GatewayMixin):
         il = QtWidgets.QVBoxLayout(intro)
         il.addWidget(_title(
             "<p>Adding a gateway lets catflap set up sites on it automatically. That works with "
-            "<b>UniFi</b> today.</p><p>For <b>TP-Link Omada</b>, <b>Alta Labs</b> and other "
-            "routers you don't need a gateway: use <b>Add a site</b> and pick the WireGuard file "
-            "the router gives you.</p>"))
+            "<b>UniFi</b> today, through the UniFi cloud.</p><p>For <b>TP-Link Omada</b>, "
+            "<b>Alta Labs</b> and other routers you don't need a gateway: use <b>Add a site</b>, "
+            "which walks you through it.</p>"))
         il.addStretch(1)
-        self.addPage(intro)
-        self.login = LoginPage(self, final=True)
-        self.addPage(self.login)
-        self.resize(700, 560)
+        self.setPage(0, intro)
+        self.access_page = UnifiAccessPage(self, final=True)
+        self.login = self.access_page
+        self.setPage(P_LOGIN, self.access_page)
+        self.setPage(P_CONSOLE, ConsolePage(self, final=True))
+        self.resize(760, 640)

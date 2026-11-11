@@ -1,5 +1,5 @@
 Name:           catflap
-Version:        0.4
+Version:        0.5
 Release:        1%{?dist}
 Summary:        Safe one-click WireGuard remote access to your sites
 License:        Apache-2.0
@@ -39,7 +39,7 @@ controlled from a tray icon.
 %pyproject_install
 %pyproject_save_files catflap
 install -Dm644 packaging/catflap.desktop %{buildroot}%{_datadir}/applications/catflap.desktop
-install -Dm644 packaging/catflap.svg %{buildroot}%{_datadir}/icons/hicolor/scalable/apps/catflap.svg
+install -Dm644 catflap/resources/catflap.svg %{buildroot}%{_datadir}/icons/hicolor/scalable/apps/catflap.svg
 
 %check
 desktop-file-validate %{buildroot}%{_datadir}/applications/catflap.desktop

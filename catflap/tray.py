@@ -28,8 +28,7 @@ from . import autostart, checks, update
 from .core import Manager
 from .drivers import DRIVERS
 from .model import Profile
-from .ui_common import (GREY, app_icon, QtCore, QtGui, QtWidgets, dot_icon, friendly_error, make_icon,
-                        make_pixmap, require_qt, run_bg, run_blocking, status_text)
+from .ui_common import (GREY, app_icon, QtCore, QtGui, QtWidgets, dot_icon, friendly_error, make_icon, require_qt, run_bg, run_blocking, status_text)
 from .version import __version__
 
 __all__ = ["MainWindow", "TrayApp", "make_icon", "main"]

@@ -91,3 +91,16 @@ def test_restart_command_runs_latest_version(monkeypatch):
     assert update.restart_command(InstallInfo("pip"))[-2:] == ["catflap", "tray"]
     monkeypatch.setattr(update.shutil, "which", lambda n: "/usr/bin/catflap-tray")
     assert update.restart_command(InstallInfo("rpm")) == ["/usr/bin/catflap-tray"]
+
+
+def test_cli_gateway_add_cloud(manager, monkeypatch, capsys):
+    from catflap.drivers import unifi
+    monkeypatch.setattr(unifi, "list_cloud_consoles",
+                        lambda key: [{"id": "AA:11", "name": "Home UDM"}, {"id": "BB", "name": "Office"}])
+    monkeypatch.setenv("CATFLAP_API_KEY", "K")
+    assert cli.main(["gateway", "add", "home", "--vendor", "unifi", "--cloud"], manager=manager) == 1
+    assert "--console" in capsys.readouterr().err
+    assert cli.main(["gateway", "add", "home2", "--vendor", "unifi", "--cloud", "--console", "home udm"],
+                    manager=manager) == 0
+    g = manager.store.gateway("home2")
+    assert g["url"].endswith("/consoles/AA:11") and manager.secrets.get("gateway/home2/api_key") == "K"

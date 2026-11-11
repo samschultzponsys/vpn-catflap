@@ -37,6 +37,9 @@ Homepage = "https://github.com/samschultzponsys/vpn-catflap"
 [tool.setuptools]
 packages = ["catflap", "catflap.drivers", "catflap.platform"]
 
+[tool.setuptools.package-data]
+catflap = ["resources/*.svg"]
+
 [tool.setuptools.dynamic]
 version = { attr = "catflap.version.__version__" }
 

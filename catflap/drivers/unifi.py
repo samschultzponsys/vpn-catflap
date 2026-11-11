@@ -1,6 +1,16 @@
 """UniFi driver.
 
-Two APIs are used, each where it is strongest:
+Two ways to reach a console:
+
+* **Cloud (default):** an account-level *Site Manager* API key from
+  unifi.ui.com. Requests go through Ubiquiti's cloud connector,
+  ``https://api.ui.com/v1/connector/consoles/<console id>/proxy/network/...``,
+  so the console never has to be reachable from where you are. One key covers
+  every console the account owns. :func:`list_cloud_consoles` finds them.
+* **Direct:** the console's own address and a console-level Network API key
+  (Settings > Control Plane > Integrations). Only works on the local network.
+
+On top of either, two APIs are used, each where it is strongest:
 
 * **Official Network integration API** (``/proxy/network/integration/v1``,
   ``X-API-KEY``): sites, networks (with subnets) and the list of VPN servers.
@@ -36,6 +46,43 @@ def _default_client(gw: GatewayConfig, headers: dict[str, str]) -> JsonClient:
                       ca_file=gw.ca_file, insecure=gw.insecure)
 
 
+CLOUD_API = "https://api.ui.com"
+
+
+def cloud_url(console_id: str) -> str:
+    return f"{CLOUD_API}/v1/connector/consoles/{console_id}"
+
+
+def list_cloud_consoles(api_key: str, client: JsonClient | None = None) -> list[dict[str, str]]:
+    """Consoles on the unifi.ui.com account that owns ``api_key``: [{id, name}]."""
+    c = client or JsonClient(CLOUD_API, headers={"X-API-KEY": api_key})
+    out: list[dict[str, str]] = []
+    token = None
+    for _ in range(20):                          # pagination guard
+        params = {"pageSize": 100, **({"nextToken": token} if token else {})}
+        try:
+            resp = c.get("/v1/hosts", params=params)
+        except HttpError as e:
+            if e.status in (401, 403):
+                raise DriverError(
+                    "unifi.ui.com refused the API key. Use a key from unifi.ui.com (Settings > "
+                    "API Keys), created by the account that owns the console.") from e
+            raise
+        for h in (resp or {}).get("data", []):
+            if h.get("type") not in (None, "console", "network-server"):
+                continue
+            rs = h.get("reportedState") or {}
+            name = rs.get("name") or rs.get("hostname") or (h.get("userData") or {}).get("name") \
+                or h.get("ipAddress") or h.get("id", "?")
+            model = (rs.get("hardware") or {}).get("name") or rs.get("model") or ""
+            out.append({"id": h.get("id", ""), "name": name, "model": model,
+                        "online": str(rs.get("state", "connected")) in ("connected", "online")})
+        token = (resp or {}).get("nextToken")
+        if not token:
+            break
+    return [h for h in out if h["id"]]
+
+
 def _first(d: dict[str, Any], *names: str) -> Any:
     for n in names:
         if d.get(n) not in (None, ""):
@@ -54,6 +101,7 @@ class UniFiDriver(Driver):
         super().__init__(gw, secrets)
         self._factory = client_factory
         opts = gw.options or {}
+        self.cloud = opts.get("mode") == "cloud"
         # Self-hosted Network Application (no UniFi OS) has no /proxy/network prefix.
         self.prefix = "" if opts.get("legacy_controller") else "/proxy/network"
         api_key = secrets.get("api_key")
@@ -88,6 +136,11 @@ class UniFiDriver(Driver):
             offset += len(data)
 
     def _login(self) -> None:
+        if self.cloud:
+            raise DriverError(
+                "UniFi's cloud connector refused this request. Ubiquiti sometimes limits the "
+                "cloud connector to the official API; if it keeps happening, add the site with "
+                "a downloaded WireGuard file instead (Add a site > UniFi > 'use a file').")
         user, pw = self.gw.username, self.secrets.get("password")
         if not (user and pw):
             raise DriverError(

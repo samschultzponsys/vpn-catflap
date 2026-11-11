@@ -1,7 +1,7 @@
 # Icon options
 
-Candidate app icons (SVG, 128×128). The one in use is `packaging/catflap.svg`
-(option **T1**). To switch, copy the chosen file over `packaging/catflap.svg`;
+Candidate app icons (SVG, 128×128). The one in use is `catflap/resources/catflap.svg`
+(option **T1**). To switch, copy the chosen file over `catflap/resources/catflap.svg`;
 the RPM, Flatpak and the app's windows all use that file. The tray icon is drawn
 in code (`make_pixmap` in `catflap/ui_common.py`) in the same tunnel-and-cat shape,
 so it needs updating separately if the shape changes.

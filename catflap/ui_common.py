@@ -26,7 +26,7 @@ def require_qt() -> None:
 
 
 # ============================================================ icons
-# The tray icon follows the app icon (packaging/catflap.svg): the first icon's
+# The tray icon follows the app icon (catflap/resources/catflap.svg): the first icon's
 # cat sitting in a tunnel arch. Coordinates are in a 64x64 box.
 _CAT = [(19, 56), (19, 41.5), ("q", 19, 37.5, 21, 35.5), (22, 29), (28, 34),
         ("q", 32, 32.75, 36, 34), (42, 29), (43, 35.5), ("q", 45, 37.5, 45, 41.5), (45, 56)]
@@ -98,10 +98,20 @@ def make_pixmap(colors: list[str], error: bool = False, size: int = 64) -> "QtGu
     return pm
 
 
+ICON_FILE = __import__("pathlib").Path(__file__).with_name("resources") / "catflap.svg"
+
+
 def app_icon() -> "QtGui.QIcon":
-    """The installed app icon (packaging/catflap.svg via the icon theme), falling
-    back to the drawn tray-style icon when it isn't installed (e.g. from source)."""
+    """The app icon, loaded from the SVG shipped inside the package.
+
+    Set directly on every window so KDE's title bar shows the current icon even
+    when the desktop's icon cache still holds an old one. Falls back to the icon
+    theme, then to the drawn tray-style icon.
+    """
     import os
+    icon = QtGui.QIcon(str(ICON_FILE))
+    if not icon.isNull() and not icon.pixmap(64, 64).isNull():
+        return icon
     for name in (os.environ.get("FLATPAK_ID", ""), "catflap"):
         if name and QtGui.QIcon.hasThemeIcon(name):
             return QtGui.QIcon.fromTheme(name)
