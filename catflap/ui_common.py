@@ -26,22 +26,45 @@ def require_qt() -> None:
 
 
 # ============================================================ icons
-# The tray icon follows the app icon (catflap/resources/catflap.svg): the first icon's
-# cat sitting in a tunnel arch. Coordinates are in a 64x64 box.
-_CAT = [(19, 56), (19, 41.5), ("q", 19, 37.5, 21, 35.5), (22, 29), (28, 34),
-        ("q", 32, 32.75, 36, 34), (42, 29), (43, 35.5), ("q", 45, 37.5, 45, 41.5), (45, 56)]
+# The tray icon follows the app icon (catflap/resources/catflap.svg): the same
+# cat silhouette, sitting in a tunnel arch and reaching up. The outline below is
+# copied from the icon file, in the icon's own 128-unit coordinates.
+CAT_OUTLINE = ("M63 44 L65 27 L72 35.5 C74 35 76 35 78 35.5 L84.5 27.5 L85 38.5 C87 40.5 88.5 43 90.5 45.5 C91 47 90 48.5 88.5 49 C87.5 50 86.5 50.8 85 51 C90 45 96 36 101 29.5 C102.5 26.8 106 26 107.6 28.4 C108.8 30.6 107.4 33.4 105.6 34.6 C99.5 41 94 49 90.5 56 C88.5 62 88 71 88.5 81 C89 89 90 96 92 100 C94 101 94.6 104 93 105.2 L84.2 105.2 C83.4 99 82.4 94 80.8 89.5 C77.5 93 74.5 98 73.2 101 C75.2 102 75.8 104.6 74 105.6 L37 105.6 C30 105.6 25.5 101.5 26.2 96.5 C26.7 93 30 92.4 31 95 C31.6 97.5 33.2 99.8 38 100.2 L46.5 100.2 C43 97 42.4 90 43.4 85 C45 77 50 71.5 55.5 67.5 C60.5 63.5 62.3 58 62.6 53 C62.8 49.5 62.9 46.5 63 44 Z")
+# Where the cat sits inside the tray icon's 64-unit box (inside the arch).
+_CAT_SCALE, _CAT_DX, _CAT_DY = 0.42, 32 - 67 * 0.42, 58 - 105.6 * 0.42
+
+
+def svg_path(d: str, scale: float = 1.0, dx: float = 0.0, dy: float = 0.0) -> "QtGui.QPainterPath":
+    """Build a QPainterPath from an absolute SVG path using M, L, C and Z."""
+    import re
+    tokens = re.findall(r"[MLCZ]|-?\d*\.?\d+", d)
+    path = QtGui.QPainterPath()
+    pt = lambda i: QtCore.QPointF(float(tokens[i]) * scale + dx, float(tokens[i + 1]) * scale + dy)  # noqa: E731
+    i, cmd = 0, None
+    while i < len(tokens):
+        if tokens[i] in "MLCZ":
+            cmd = tokens[i]
+            i += 1
+            if cmd == "Z":
+                path.closeSubpath()
+                continue
+        if cmd == "M":
+            path.moveTo(pt(i))
+            i += 2
+            cmd = "L"            # further pairs after M are line-tos
+        elif cmd == "L":
+            path.lineTo(pt(i))
+            i += 2
+        elif cmd == "C":
+            path.cubicTo(pt(i), pt(i + 2), pt(i + 4))
+            i += 6
+        else:
+            raise ValueError(f"unsupported SVG path command near token {i}")
+    return path
 
 
 def _cat_path(s: float) -> "QtGui.QPainterPath":
-    path = QtGui.QPainterPath()
-    path.moveTo(_CAT[0][0] * s, _CAT[0][1] * s)
-    for pt in _CAT[1:]:
-        if pt[0] == "q":
-            path.quadTo(pt[1] * s, pt[2] * s, pt[3] * s, pt[4] * s)
-        else:
-            path.lineTo(pt[0] * s, pt[1] * s)
-    path.closeSubpath()
-    return path
+    return svg_path(CAT_OUTLINE, _CAT_SCALE * s, _CAT_DX * s, _CAT_DY * s)
 
 
 def _arch_path(s: float) -> "QtGui.QPainterPath":
@@ -55,7 +78,7 @@ def _arch_path(s: float) -> "QtGui.QPainterPath":
 
 
 def make_pixmap(colors: list[str], error: bool = False, size: int = 64) -> "QtGui.QPixmap":
-    """The tray icon: the cat in its tunnel.
+    """The tray icon: the cat sitting in its tunnel, reaching up.
 
     Disconnected: grey arch, cat drawn as an outline only. Connected: arch and
     cat in the connection colour (cat striped when several sites are up).
@@ -79,10 +102,6 @@ def make_pixmap(colors: list[str], error: bool = False, size: int = 64) -> "QtGu
                                 bounds.width() / n + 1, bounds.height())
             p.fillRect(seg, QtGui.QColor(c))
         p.restore()
-        p.setPen(Qt.NoPen)
-        p.setBrush(QtGui.QColor("#0F172A"))
-        for ex in (27, 37):     # eyes
-            p.drawEllipse(QtCore.QPointF(ex * s, 43 * s), 2.3 * s, 2.9 * s)
     else:
         p.setPen(QtGui.QPen(QtGui.QColor(GREY), 3 * s, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
         p.setBrush(Qt.NoBrush)

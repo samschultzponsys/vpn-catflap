@@ -3,6 +3,12 @@
 Versions are `MAJOR.MINOR`; the minor number runs 0–9 and then rolls over
 (1.9 → 2.0). Every release is tagged `vMAJOR.MINOR`.
 
+## 0.6
+
+- New app icon (Z1a): a white cat sitting in the blue tunnel, reaching up.
+- Tray icon redrawn from the same cat outline: grey outline when disconnected, the
+  site's colour when connected (split for several sites), red dot after a failure.
+
 ## 0.5
 
 - **UniFi through the cloud:** the guide now uses an account API key from
