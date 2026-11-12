@@ -55,8 +55,13 @@ class FakeBackend(Backend):
         return profile.name in self.active
 
     def ping(self, host, count=1, timeout_s=2):
-        # site addresses only answer through an active tunnel
-        return self.ping_ok and bool(self.active)
+        # Site addresses only answer through an active tunnel that routes them.
+        import ipaddress
+        if not self.ping_ok:
+            return False
+        ip = ipaddress.ip_address(host)
+        return any(ip in ipaddress.ip_network(r, strict=False)
+                   for n in self.active for r in getattr(self.installed.get(n), "allowed_ips", []))
 
 
 class FakeDriver(Driver):

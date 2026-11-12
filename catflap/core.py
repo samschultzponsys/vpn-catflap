@@ -455,15 +455,31 @@ class Manager:
         return checks.preflight(p, self.backend.local_network(), self.others_state(),
                                 resolver=self.resolver, my_public_ip=my_ip, reachable=reach)
 
-    def connect(self, name: str, force: bool = False, keep_on_failure: bool = False) -> Outcome:
+    def connect(self, name: str, force: bool = False, keep_on_failure: bool = False,
+                switch: bool = False) -> Outcome:
+        """Connect a site. With ``switch``, sites that can't be up at the same time
+        (they use the same addresses) are disconnected first."""
         p = self.store.profile(name)
         if self.backend.status(p).active:
             return Outcome(True, [checks.Finding(checks.INFO, "already-up", f"'{name}' is already connected.")], p)
         findings = self.preflight(name)
+        clashes = [f for f in findings if f.code == "tunnel-overlap" and f.level == checks.ERROR]
+        if switch and clashes and all(f.code == "tunnel-overlap" for f in findings if f.level == checks.ERROR):
+            for other in sorted({f.other for f in clashes if f.other}):
+                self.disconnect(other)
+            findings = self.preflight(name)
         if checks.has_errors(findings) and not force:
             return Outcome(False, findings, p)
         # Same addresses here as at the site? Route around the local router (#8).
         routes, excluded = checks.conflict_safe_routes(p.routes, self.backend.local_network(), p.ifname)
+        # Single addresses another connected site already routes (e.g. both sites' VPN
+        # server at 192.168.3.1) stay with that tunnel.
+        shared = {r for r in routes if netutil.net(r).prefixlen == netutil.net(r).max_prefixlen
+                   and any(r in (o.installed_routes or o.routes)
+                           for n, (o, act) in self.others_state().items() if act and n != name)}
+        if shared:
+            routes = [r for r in routes if r not in shared]
+            excluded = sorted(set(excluded) | {r.split("/")[0] for r in shared})
         if routes != (p.installed_routes or p.routes):
             p = self._install_routes(p, routes)
         self.backend.up(p)

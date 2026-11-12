@@ -367,7 +367,7 @@ def cmd_check(m: Manager, a, out: Out) -> int:
 
 def cmd_up(m: Manager, a, out: Out) -> int:
     out.say(f"Connecting '{a.name}'...")
-    res = m.connect(a.name, force=a.force, keep_on_failure=a.keep_on_failure)
+    res = m.connect(a.name, force=a.force, keep_on_failure=a.keep_on_failure, switch=a.switch)
     print_findings(out, res.findings)
     out.put("connected", res.ok)
     out.say("Connected." if res.ok else "Not connected.")
@@ -567,6 +567,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("name")
     p.add_argument("--force", action="store_true", help="connect despite pre-flight errors")
     p.add_argument("--keep-on-failure", action="store_true", help="leave the tunnel up if the health check fails")
+    p.add_argument("--switch", action="store_true",
+                   help="disconnect sites that use the same addresses first, then connect")
     p.set_defaults(fn=cmd_up)
     p = sub.add_parser("down", help="disconnect")
     p.add_argument("name")

@@ -38,15 +38,27 @@ def wait_for(qapp, cond, timeout=5.0):
 
 def test_icon_states(qapp):
     off = make_icon([]).pixmap(64, 64).toImage()
-    on = make_icon(["#ff0000"]).pixmap(64, 64).toImage()
+    on = make_icon(["#ff0000"]).pixmap(64, 64).toImage()          # default style: site color
     assert off != on
-    tile = on.pixelColor(4, 32)                      # solid blue tile when connected
-    assert tile.blue() > 150 and tile.red() < 100
-    dot = on.pixelColor(51, 51)                      # green status dot
+    tile = on.pixelColor(4, 32)
+    assert tile.red() > 150 and tile.blue() < 100
+    dot = on.pixelColor(51, 51)                                     # green status dot
     assert dot.green() > 150 and dot.red() < 100
-    assert off.pixelColor(4, 32).alpha() == 0       # disconnected: just the outline
+    assert off.pixelColor(4, 32).alpha() == 0                      # disconnected: outline only
     err = make_icon([], error=True).pixmap(64, 64).toImage().pixelColor(51, 51)
     assert err.red() > 180 and err.green() < 100
+
+
+def test_icon_styles_for_several_sites(qapp):
+    red, blue = "#ff0000", "#0000ff"
+    grad = make_icon([red, blue]).pixmap(64, 64).toImage()          # blend across both
+    top_left, bottom_right = grad.pixelColor(6, 6), grad.pixelColor(58, 40)
+    assert top_left.red() > top_left.blue() and bottom_right.blue() > bottom_right.red()
+    c0 = make_icon([red, blue], style="cycle", phase=0.0).pixmap(64, 64).toImage().pixelColor(4, 32)
+    c1 = make_icon([red, blue], style="cycle", phase=1.0).pixmap(64, 64).toImage().pixelColor(4, 32)
+    assert c0.red() > c0.blue() and c1.blue() > c1.red()           # cycles from red to blue
+    b = make_icon([red, blue], style="blue").pixmap(64, 64).toImage().pixelColor(4, 32)
+    assert b.blue() > 150 and b.red() < 100                        # always the blue app icon
 
 
 def test_tray_menu_and_basic_window(qapp, manager, backend):

@@ -113,6 +113,17 @@ class MainWindow(QtWidgets.QMainWindow if QtWidgets else object):
         self.a_updates.toggled.connect(lambda v: self.app.set_setting("update_check", v))
         sm.addAction("Ask again what the close button does",
                      lambda: self.app.set_setting("close_behavior", "ask"))
+        tm = sm.addMenu("Tray icon when connected")
+        tgrp = QtGui.QActionGroup(self)
+        current = self.app.settings.get("tray_style", "site")
+        for style, label in (("site", "Site colors (blend when several are connected)"),
+                             ("cycle", "Cycle through site colors"),
+                             ("blue", "Blue")):
+            a = tm.addAction(label)
+            a.setCheckable(True)
+            a.setChecked(style == current)
+            tgrp.addAction(a)
+            a.triggered.connect(lambda _=False, st=style: self.app.set_tray_style(st))
         hm = mb.addMenu("&Help")
         hm.addAction("Setup guide…", self.app.first_run)
         hm.addAction("Check for updates…", lambda: self.app.check_updates(interactive=True))
@@ -332,6 +343,8 @@ class MainWindow(QtWidgets.QMainWindow if QtWidgets else object):
 # ============================================================ tray app
 class TrayApp(QtCore.QObject if QtCore else object):
     POLL_MS = 5000
+    CYCLE_MS = 100          # tray color cycling: 100 ms steps,
+    CYCLE_STEP = 0.04       # 2.5 s per site color
 
     def __init__(self, qapp: "QtWidgets.QApplication", manager: Manager | None = None):
         super().__init__()
@@ -358,6 +371,9 @@ class TrayApp(QtCore.QObject if QtCore else object):
         self.timer = QtCore.QTimer(self)
         self.timer.timeout.connect(self.poll)
         self.timer.start(self.POLL_MS)
+        self._phase = 0.0
+        self._cycle = QtCore.QTimer(self)        # tray color cycling (style "cycle")
+        self._cycle.timeout.connect(self._cycle_tick)
         self._render()
         self.poll()
         if self.settings.get("update_check", True):
@@ -401,10 +417,39 @@ class TrayApp(QtCore.QObject if QtCore else object):
         self.profiles, self.status = res
         self._render()
 
-    def _render(self) -> None:
+    def _tray_icon(self) -> "QtGui.QIcon":
         active = [n for n, s in self.status.items() if s and s.active and n in self.profiles]
         colors = [self.profiles[n].color or "#22C55E" for n in sorted(active)]
-        self.tray.setIcon(make_icon(colors, error=bool(self.errors) and not active))
+        failed = any(not e.startswith(INFO) for e in self.errors.values())
+        style = self.settings.get("tray_style", "site")
+        return make_icon(colors, error=failed and not active, style=style, phase=self._phase)
+
+    def _cycle_tick(self) -> None:
+        """Fade the tray icon through the connected sites' colors (style "cycle")."""
+        n = sum(1 for s in self.status.values() if s and s.active)
+        if self.settings.get("tray_style", "site") != "cycle" or n < 2:
+            self._cycle.stop()
+            return
+        self._phase = (self._phase + self.CYCLE_STEP) % n
+        self.tray.setIcon(self._tray_icon())
+
+    def _update_cycle_timer(self) -> None:
+        n = sum(1 for s in self.status.values() if s and s.active)
+        want = self.settings.get("tray_style", "site") == "cycle" and n >= 2
+        if want and not self._cycle.isActive():
+            self._cycle.start(self.CYCLE_MS)
+        elif not want and self._cycle.isActive():
+            self._cycle.stop()
+
+    def set_tray_style(self, style: str) -> None:
+        self.set_setting("tray_style", style)
+        self._phase = 0.0
+        self._render()
+
+    def _render(self) -> None:
+        active = [n for n, s in self.status.items() if s and s.active and n in self.profiles]
+        self.tray.setIcon(self._tray_icon())
+        self._update_cycle_timer()
         names = [self.profiles[n].display for n in sorted(active)]
         self.tray.setToolTip("CatFlap: " + (", ".join(names) + " connected" if names
                                              else "not connected"))
@@ -516,6 +561,8 @@ class TrayApp(QtCore.QObject if QtCore else object):
             self.checks[name] = res.findings
             self.tray.showMessage(f"CatFlap: {label}", codes["on-site"].message,
                                   QtWidgets.QSystemTrayIcon.Information, 6000)
+        elif connecting and res is not None and not res.ok and self._offer_switch(name, label, res):
+            return
         elif connecting and res is not None and not res.ok:
             bad = [f.message for f in res.findings if f.level == checks.ERROR]
             self.errors[name] = bad[0] if bad else "failed"
@@ -535,6 +582,31 @@ class TrayApp(QtCore.QObject if QtCore else object):
                 self.tray.showMessage("CatFlap", f"{label} {'connected' if connecting else 'disconnected'}",
                                       QtWidgets.QSystemTrayIcon.Information, 3000)
         self.poll()
+
+    def _offer_switch(self, name: str, label: str, res) -> bool:
+        """Two sites with the same addresses can't both be up: offer to switch."""
+        errors = [f for f in res.findings if f.level == checks.ERROR]
+        if not errors or any(f.code != "tunnel-overlap" for f in errors):
+            return False
+        others = sorted({f.other for f in errors if f.other})
+        names = ", ".join(self.profiles[o].display if o in self.profiles else o for o in others)
+        box = QtWidgets.QMessageBox(self.window)
+        box.setWindowTitle("Switch sites?")
+        box.setText(f"{label} and {names} use the same addresses, so only one of them can be "
+                    "connected at a time.")
+        box.setInformativeText(f"Disconnect {names} and connect {label}?")
+        switch = box.addButton(f"Switch to {label}", QtWidgets.QMessageBox.AcceptRole)
+        box.addButton(QtWidgets.QMessageBox.Cancel)
+        box.setDefaultButton(switch)
+        self.run_dialog(box)
+        if box.clickedButton() is switch:
+            self.busy.add(name)
+            self._render()
+            run_bg(lambda: self.m.connect(name, switch=True),
+                   lambda r, e: self._toggled(name, r, e, True))
+        else:
+            self.poll()
+        return True
 
     def check_updates(self, interactive: bool) -> None:
         run_bg(lambda: update.check(self.settings, force=interactive),

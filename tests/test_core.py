@@ -200,3 +200,27 @@ def test_manual_peer_for_routers_without_files(manager, backend):
     assert p.endpoint_host == "cabin.example.net" and backend.installed["cabin"].keepalive == 25
     with pytest.raises(CatflapError, match="public key"):
         manager.manual_peer(priv, "nope", "x", 51820, "10.0.0.2")
+
+
+def test_two_sites_with_the_same_network_switch(manager, backend):
+    manager.provision("home-gw", "home", ["LAN"], device="d", label="Home")
+    manager.provision("home-gw", "cabin", ["LAN"], device="d", label="Cabin")   # same 192.168.1.0/24
+    assert manager.connect("home").ok
+    res = manager.connect("cabin")
+    clash = [f for f in res.findings if f.code == "tunnel-overlap"]
+    assert not res.ok and clash and clash[0].other == "home"
+    assert "only one of them can be connected" in clash[0].message
+    res = manager.connect("cabin", switch=True)
+    assert res.ok and "cabin" in backend.active and "home" not in backend.active
+
+
+def test_two_sites_sharing_only_the_vpn_server_address(manager, backend):
+    # The fake gateway gives every site the same VPN server address (10.250.1.1).
+    manager.provision("home-gw", "home", ["LAN"], device="d")
+    manager.provision("home-gw", "lake", ["IoT"], device="d")
+    assert manager.connect("home").ok
+    res = manager.connect("lake")
+    assert res.ok and {"home", "lake"} <= backend.active          # both connected at once
+    assert any(f.code == "shared-host-route" for f in res.findings)
+    assert "10.250.1.1/32" not in backend.installed["lake"].allowed_ips
+    assert "192.168.20.0/24" in backend.installed["lake"].allowed_ips

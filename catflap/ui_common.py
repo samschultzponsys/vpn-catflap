@@ -77,13 +77,18 @@ def _arch_path(s: float) -> "QtGui.QPainterPath":
     return path
 
 
-def make_pixmap(colors: list[str], error: bool = False, size: int = 64) -> "QtGui.QPixmap":
+def make_pixmap(colors: list[str], error: bool = False, size: int = 64,
+                style: str = "site", phase: float = 0.0) -> "QtGui.QPixmap":
     """The tray icon: the cat sitting in its tunnel, reaching up.
 
-    Disconnected: grey outline. Connected: the solid blue app icon (blue tile,
-    white tunnel and cat) with a green dot; the dot shows how many sites are
-    connected when there's more than one. Failed: grey outline with a red dot.
-    ``colors`` holds one entry per connected site.
+    Disconnected: grey outline. Failed: grey outline with a red dot.
+    Connected: a solid tile with the white tunnel and cat and a green dot (the dot
+    shows how many sites are connected when there's more than one). ``colors``
+    holds one color per connected site; ``style`` picks the tile:
+
+    * ``"site"``: the site's color; with several sites, a gradient across all of them
+    * ``"cycle"``: fades from one site's color to the next (``phase`` 0..n moves it)
+    * ``"blue"``: always the blue app icon
     """
     pm = QtGui.QPixmap(size, size)
     pm.fill(Qt.transparent)
@@ -92,9 +97,7 @@ def make_pixmap(colors: list[str], error: bool = False, size: int = 64) -> "QtGu
     s = size / 64.0
     cat = _cat_path(s)
     if colors:
-        tile = QtGui.QLinearGradient(0, 0, size, size)
-        tile.setColorAt(0, QtGui.QColor("#3B82F6"))
-        tile.setColorAt(1, QtGui.QColor("#1E3A8A"))
+        tile = _tile_gradient(colors, size, style, phase)
         p.setPen(Qt.NoPen)
         p.setBrush(QtGui.QBrush(tile))
         p.drawRoundedRect(QtCore.QRectF(2 * s, 2 * s, 60 * s, 60 * s), 14 * s, 14 * s)
@@ -115,6 +118,35 @@ def make_pixmap(colors: list[str], error: bool = False, size: int = 64) -> "QtGu
             _badge(p, s, RED, "")
     p.end()
     return pm
+
+
+def _mix(a: "QtGui.QColor", b: "QtGui.QColor", t: float) -> "QtGui.QColor":
+    t = max(0.0, min(1.0, t))
+    return QtGui.QColor.fromRgbF(a.redF() + (b.redF() - a.redF()) * t,
+                                 a.greenF() + (b.greenF() - a.greenF()) * t,
+                                 a.blueF() + (b.blueF() - a.blueF()) * t)
+
+
+def _tile_gradient(colors: list[str], size: int, style: str, phase: float) -> "QtGui.QLinearGradient":
+    g = QtGui.QLinearGradient(0, 0, size, size)
+    if style == "blue" or not colors:
+        g.setColorAt(0, QtGui.QColor("#3B82F6"))
+        g.setColorAt(1, QtGui.QColor("#1E3A8A"))
+        return g
+    cols = [QtGui.QColor(c) for c in colors]
+    if style == "cycle" and len(cols) > 1:
+        i = int(phase) % len(cols)
+        base = _mix(cols[i], cols[(i + 1) % len(cols)], phase - int(phase))
+        cols = [base]
+    if len(cols) == 1:
+        # One color: a gentle light-to-deep shade of it, like the app icon.
+        c = cols[0]
+        g.setColorAt(0, c.lighter(115))
+        g.setColorAt(1, c.darker(150))
+        return g
+    for i, c in enumerate(cols):
+        g.setColorAt(i / (len(cols) - 1), c)
+    return g
 
 
 def _badge(p: "QtGui.QPainter", s: float, color: str, text: str) -> None:
@@ -152,8 +184,9 @@ def app_icon() -> "QtGui.QIcon":
     return QtGui.QIcon(make_pixmap(["#3B82F6"], size=128))
 
 
-def make_icon(colors: list[str], error: bool = False, size: int = 64) -> "QtGui.QIcon":
-    return QtGui.QIcon(make_pixmap(colors, error, size))
+def make_icon(colors: list[str], error: bool = False, size: int = 64,
+              style: str = "site", phase: float = 0.0) -> "QtGui.QIcon":
+    return QtGui.QIcon(make_pixmap(colors, error, size, style, phase))
 
 
 def dot_pixmap(color: str, filled: bool, size: int = 16) -> "QtGui.QPixmap":

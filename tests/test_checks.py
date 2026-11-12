@@ -112,6 +112,8 @@ def test_health_no_handshake(backend):  # problem 1
 
 
 def test_health_ok(backend):
+    from types import SimpleNamespace
     backend.active.add("home")
+    backend.installed["home"] = SimpleNamespace(allowed_ips=["10.250.1.1/32"])
     f = checks.health(prof(), backend, wait=0, sleep=lambda s: None)
     assert {"handshake", "ping"} <= codes(f)

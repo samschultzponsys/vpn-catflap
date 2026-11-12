@@ -401,6 +401,18 @@ catflap set office --no-dns     # remove it again
 Only `*.ponsys.lan` queries go to `10.0.0.1`. CatFlap never sets a catch-all `~`
 domain, and refuses a DNS server that isn't inside a routed network.
 
+### Several sites at once
+
+Connect as many sites as you like; each gets its own tunnel, and only its own
+networks go through it:
+- **Different networks:** they simply work side by side.
+- **The same networks at two sites** (e.g. both 192.168.1.0/24): only one can be
+  up at a time. CatFlap offers to **switch** (disconnect the other and connect
+  this one); on the command line, `catflap up <site> --switch`.
+- **Only the VPN server address is the same** (UniFi often gives every site
+  192.168.3.1): that's fine. CatFlap leaves that one address to the site that was
+  connected first and checks the other connection by its handshake instead.
+
 ### Connect, disconnect, status
 
 ```bash
@@ -543,10 +555,14 @@ button. With no sites yet, it shows a big **Add your first site** button.
 
 - **The icon:** the app's cat, sitting in its tunnel and reaching up.
   - **Grey outline:** nothing connected.
-  - **Solid blue icon with a green dot:** connected. With several sites
-    connected, the dot shows how many.
+  - **Solid icon with a green dot:** connected. With several sites connected, the
+    dot shows how many. The tile color is set under **Settings → Tray icon when
+    connected**:
+    - **Site colors** (default): the site's own color, or a blend of all connected
+      sites' colors.
+    - **Cycle through site colors:** fades from one site's color to the next.
+    - **Blue:** always the blue app icon.
   - **Grey outline with a red dot:** the last connection attempt failed.
-  - Each site's own color shows on its card and in the tray menu.
 - **Clicking it:**
   - **Left-click** shows or hides the window.
   - **Right-click** lists your sites with their status. Click one to connect or

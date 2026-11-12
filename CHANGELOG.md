@@ -3,6 +3,19 @@
 Versions are `MAJOR.MINOR`; the minor number runs 0–9 and then rolls over
 (1.9 → 2.0). Every release is tagged `vMAJOR.MINOR`.
 
+## 1.2
+
+- Tray icon with several sites connected: the tile blends their colors (default), or
+  cycles through them, or stays blue: Settings → Tray icon when connected. With
+  one site it uses that site's color.
+- Several sites at once, handled automatically: two sites using the same networks
+  offer to **switch** (`catflap up --switch`); sites that only share a VPN server
+  address both connect, with that address left to the first tunnel.
+- Fixed: the red failure dot also showed for informational notes such as "You're
+  here".
+- Fixed: a site reachable only through another connected CatFlap tunnel was
+  mistaken for "you're on site".
+
 ## 1.1
 
 - Tray icon: turns into the solid blue app icon with a green dot when connected (the

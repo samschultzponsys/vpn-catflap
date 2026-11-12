@@ -26,10 +26,11 @@ class Finding:
     code: str
     message: str
     problem: int | None = None
+    other: str | None = None         # the other site involved, for tunnel clashes
 
     def to_dict(self) -> dict:
         return {"level": self.level, "code": self.code, "message": self.message,
-                "problem": self.problem}
+                "problem": self.problem, "other": self.other}
 
 
 Resolver = Callable[[str], list[str]]
@@ -183,10 +184,29 @@ def preflight(profile: Profile, local: LocalNetwork, others: dict[str, tuple[Pro
     for name, (other, active) in others.items():
         if name == profile.name:
             continue
-        for m, o in netutil.find_overlaps(mine, other.routes):
-            out.append(Finding(ERROR if active else WARN, "tunnel-overlap",
-                               f"Network {m} overlaps {o} of {'active ' if active else ''}tunnel "
-                               f"'{name}'." + (" Disconnect it first." if active else ""), 8))
+        other_routes = other.installed_routes or other.routes
+        clashes = netutil.find_overlaps(mine, other_routes)
+        # Both sides routing the same single address (typically the VPN server's own
+        # address, e.g. UniFi's default 192.168.3.1 at two sites) isn't a real clash:
+        # catflap leaves it to the tunnel that's already up.
+        hosts = [(m, o) for m, o in clashes if netutil.net(m).prefixlen == netutil.net(m).max_prefixlen]
+        real = [c for c in clashes if c not in hosts]
+        if hosts and active:
+            out.append(Finding(INFO, "shared-host-route",
+                               f"{', '.join(sorted({m for m, _ in hosts}))} is also used by "
+                               f"'{other.display}'; catflap leaves it to that tunnel.", 8, other=name))
+        if real:
+            nets = ", ".join(sorted({m for m, _ in real}))
+            if active:
+                out.append(Finding(ERROR, "tunnel-overlap",
+                                   f"{profile.display} and {other.display} use the same addresses "
+                                   f"({nets}), so only one of them can be connected at a time.",
+                                   8, other=name))
+            else:
+                out.append(Finding(WARN, "tunnel-overlap",
+                                   f"{profile.display} and {other.display} use the same addresses "
+                                   f"({nets}); they can't be connected at the same time.",
+                                   8, other=name))
         if profile.vpn_subnet and other.vpn_subnet and netutil.overlaps(profile.vpn_subnet, other.vpn_subnet):
             out.append(Finding(WARN, "vpn-subnet-collision",
                                f"VPN subnet {profile.vpn_subnet} collides with '{name}' "
@@ -194,8 +214,12 @@ def preflight(profile: Profile, local: LocalNetwork, others: dict[str, tuple[Pro
 
     # -- already reachable (linked site / on-site) (#12) -----------------------
     if not local_conflicts and reachable:
+        # Reachable through another connected catflap tunnel doesn't mean on-site.
+        via_tunnels = [r for n2, (o, act) in others.items() if act and n2 != profile.name
+                       for r in (o.installed_routes or o.routes)]
         targets = [n.get("gateway_ip") for n in profile.networks
-                   if n.get("gateway_ip") and n.get("cidr") in mine]
+                   if n.get("gateway_ip") and n.get("cidr") in mine
+                   and not any(netutil.overlaps(n["gateway_ip"] + "/32", r) for r in via_tunnels)]
         for t in targets[:1]:
             if reachable(t):
                 out.append(Finding(ERROR, "already-reachable",
