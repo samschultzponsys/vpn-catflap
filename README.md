@@ -1,5 +1,8 @@
 <img src="catflap/resources/catflap.svg" alt="catflap icon" width="96" align="right">
 
+#
+#
+
 # VPN CatFlap (`catflap`)
 
 Safe, one-click WireGuard remote access to your sites, from a tray icon. A
