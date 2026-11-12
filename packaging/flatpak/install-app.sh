@@ -7,8 +7,15 @@ cp -r catflap "$SITE/"
 python3 -m compileall -q "$SITE/catflap"
 install -Dm755 packaging/flatpak/catflap.sh /app/bin/catflap
 install -Dm755 packaging/flatpak/catflap-tray.sh /app/bin/catflap-tray
-install -Dm644 packaging/flatpak/io.github.samschultzponsys.CatFlap.desktop -t /app/share/applications
-install -Dm644 catflap/resources/catflap.svg /app/share/icons/hicolor/scalable/apps/io.github.samschultzponsys.CatFlap.svg
+ID=io.github.samschultzponsys.CatFlap
+# The launcher uses an icon name that changes whenever the artwork changes, so
+# desktops that cache icons by name (KDE does, even across reinstalls) can't keep
+# showing an old icon. The plain name stays for AppStream/software centres.
+REV=$(sha256sum catflap/resources/catflap.svg | cut -c1-8)
+install -Dm644 catflap/resources/catflap.svg /app/share/icons/hicolor/scalable/apps/$ID.svg
+install -Dm644 catflap/resources/catflap.svg /app/share/icons/hicolor/scalable/apps/$ID.icon$REV.svg
+mkdir -p /app/share/applications
+sed "s/^Icon=.*/Icon=$ID.icon$REV/" packaging/flatpak/$ID.desktop > /app/share/applications/$ID.desktop
 install -Dm644 packaging/flatpak/io.github.samschultzponsys.CatFlap.metainfo.xml -t /app/share/metainfo
 install -Dm644 LICENSE NOTICE -t /app/share/licenses/io.github.samschultzponsys.CatFlap
 install -Dm755 packaging/flatpak/trim.sh /app/share/catflap/trim.sh

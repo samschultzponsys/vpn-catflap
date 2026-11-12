@@ -260,9 +260,21 @@ catflap gateway add home --vendor unifi --cloud --console "Home UDM"
   works on that console's own network. Use it with **Directly** in the guide, or
   `catflap gateway add … --url https://<console address>`.
 
-**Before adding a site,** the console needs a WireGuard server: **Settings → VPN →
-VPN Server → Create New → WireGuard**, then **Create / Apply Changes**. The guide
-checks for this and shows these steps if it's missing (problem #1).
+**Before adding a site,** the console needs a WireGuard server. The guide checks
+for this and shows these steps if it's missing (problem #1). In UniFi Network,
+go to **Settings → VPN → VPN Server → Create New** (labels can differ slightly by
+version):
+
+| Field | What to put |
+|---|---|
+| VPN Type | WireGuard |
+| Name | Anything, e.g. *Remote access* |
+| Port | 51820 (the default) |
+| Gateway / Subnet | A range used for nothing else, different at every site: `10.250.1.1/24`, then `10.250.2.1/24` at the next site… Avoid 192.168.x.x |
+| DNS | Leave as is; catflap keeps your own DNS anyway |
+| Clients → Add Client (required) | Name it after **this computer** (e.g. *sam-laptop*), one per computer, and keep the suggested IP. **Download** its configuration file; it's the file catflap asks for when going through the cloud |
+
+Then click **Create / Apply Changes**.
 
 **What the cloud allows:**
 - UniFi's official API, which is all that unifi.ui.com keys reach, covers sites,
@@ -274,9 +286,10 @@ checks for this and shows these steps if it's missing (problem #1).
 - With that file, catflap still checks the WireGuard server exists, still lists
   your networks to tick, and still applies every safety fix.
 
-**Downloading the file:** open the console on unifi.ui.com → **Network → Settings →
-VPN → VPN Server**, open the WireGuard server, then **Add Client** (one per computer)
-and **Download** its configuration.
+**Downloading the file:** use the client file you downloaded when creating the
+server. For another computer, open the console on unifi.ui.com → **Network →
+Settings → VPN → VPN Server**, open the WireGuard server, **Add Client** (named after
+that computer), **Download** its configuration and **Apply Changes**.
 
 **Fully automatic** creation of clients works with **Directly** (a console key,
 while on the console's network) or a self-hosted controller.
@@ -729,7 +742,7 @@ also set `CATFLAP_SECRETS=file`.
 | *Polkit denied the change* | Run as your desktop user in an active session, not with sudo or SSH |
 | *the UniFi classic API refused the API key* | Add a local admin with `--username`, or use `catflap import` |
 | *gateway TLS certificate changed* | The console's certificate changed; re-pin with `catflap gateway add … --tofu` |
-| The taskbar or app menu still shows an old catflap icon after an update | KDE caches icons and doesn't notice Flatpak updates. Run `rm -f ~/.cache/icon-cache.kcache`, then log out and back in |
+| The taskbar or app menu still shows an old catflap icon | Fixed from 0.8: the launcher's icon name changes whenever the artwork does, so KDE's icon cache can't reuse an old one. For older versions: `rm -f ~/.cache/icon-cache.kcache`, then log out and back in |
 | *NetworkManager did not keep the safe settings* | An NM plugin or policy overrode them; the connection was removed for safety. Please file a bug |
 
 ## CGNAT sites

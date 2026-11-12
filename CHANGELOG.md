@@ -3,6 +3,15 @@
 Versions are `MAJOR.MINOR`; the minor number runs 0–9 and then rolls over
 (1.9 → 2.0). Every release is tagged `vMAJOR.MINOR`.
 
+## 0.8
+
+- Icon: the launcher's icon name now changes whenever the artwork changes (Flatpak
+  and RPM), so KDE can't keep showing an old cached icon in the taskbar and app
+  menu, even across reinstalls.
+- UniFi: exact steps for creating the WireGuard server, including the client UniFi
+  requires at the same time (make it this computer and download its file), and
+  what to put in each field (port, a unique VPN subnet per site, DNS).
+
 ## 0.7
 
 - UniFi through the cloud: when the cloud connector refuses UniFi's internal API

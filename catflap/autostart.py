@@ -12,7 +12,7 @@ Type=Application
 Name=catflap
 Comment=WireGuard remote access to your sites
 Exec={exec} tray --minimized
-Icon=catflap
+Icon={icon}
 Terminal=false
 X-GNOME-Autostart-enabled=true
 X-KDE-autostart-after=panel
@@ -65,6 +65,8 @@ def set_enabled(enabled: bool) -> None:
     f = _autostart_file()
     if enabled:
         f.parent.mkdir(parents=True, exist_ok=True)
-        f.write_text(DESKTOP_ENTRY.format(exec=_exec_cmd()), encoding="utf-8")
+        f.write_text(DESKTOP_ENTRY.format(exec=_exec_cmd(),
+                                          icon=os.environ.get("FLATPAK_ID", "catflap")),
+                     encoding="utf-8")
     else:
         f.unlink(missing_ok=True)

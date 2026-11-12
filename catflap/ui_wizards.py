@@ -83,25 +83,40 @@ address on that network.</p>
 """
 
 UNIFI_SERVER_HELP = """
-<b>Your UniFi console doesn't have a WireGuard VPN server yet.</b> Create one (one time):
+<b>Your UniFi console doesn't have a WireGuard VPN server yet.</b> Create one (one time).
+UniFi asks you to add a client at the same time: make that client <b>this computer</b>.
 <ol>
-<li>Open your console on <a href="https://unifi.ui.com">unifi.ui.com</a> → <b>Network</b>.</li>
-<li>Go to <b>Settings → VPN → VPN Server</b>.</li>
-<li>Click <b>Create New</b> and choose <b>WireGuard</b>. Keep the suggested port (51820).</li>
-<li>Click <b>Create</b> / <b>Apply Changes</b>. This step is easy to miss: without it the VPN
-    never works.</li>
+<li>Open your console on <a href="https://unifi.ui.com">unifi.ui.com</a> → <b>Network</b> →
+    <b>Settings → VPN → VPN Server</b> → <b>Create New</b>.</li>
+<li>Fill it in (labels can differ slightly between Network versions):
+  <ul>
+  <li><b>VPN Type:</b> WireGuard</li>
+  <li><b>Name:</b> anything, e.g. <i>Remote access</i></li>
+  <li><b>Port:</b> keep <b>51820</b></li>
+  <li><b>Gateway / Subnet</b> (the VPN's own address range): a range used for nothing else
+      and different at every site, e.g. <b>10.250.1.1/24</b> here and 10.250.2.1/24 at the
+      next site. Avoid 192.168.x.x: homes and hotels use those.</li>
+  <li><b>DNS:</b> leave as it is (catflap keeps your own DNS anyway).</li>
+  </ul></li>
+<li><b>Clients → Add Client:</b> name it after <b>this computer</b> (e.g.
+    <i>sam-laptop</i>; one client per computer) and keep the suggested IP address.</li>
+<li><b>Download</b> that client's configuration file. Keep it: if catflap asks for a
+    file in the next step, this is the one.</li>
+<li>Click <b>Create</b> / <b>Apply Changes</b>. Easy to miss: without it the VPN never
+    works.</li>
 <li>Come back here and click <b>Check again</b>.</li>
 </ol>
 """
 
 FILE_HELP = {
-    "unifi": """<p><b>Get a WireGuard file from UniFi:</b></p><ol>
+    "unifi": """<p><b>Get this computer's WireGuard file from UniFi:</b></p><ol>
 <li>Open your console on <a href="https://unifi.ui.com">unifi.ui.com</a> → <b>Network</b> →
-    <b>Settings → VPN → VPN Server</b>.</li>
-<li>Open your <b>WireGuard</b> server (create it and click <b>Apply Changes</b> first if there
-    isn't one).</li>
-<li>Click <b>Add Client</b>, name it after this computer, and <b>Download</b> its configuration
-    file.</li></ol>""",
+    <b>Settings → VPN → VPN Server</b> and open your <b>WireGuard</b> server.</li>
+<li>If you created the server a moment ago with a client for this computer, use the file
+    you downloaded then.</li>
+<li>Otherwise, under <b>Clients</b> click <b>Add Client</b>, name it after this computer
+    (e.g. <i>sam-laptop</i>; one client per computer), keep the suggested IP address,
+    <b>Download</b> its configuration file, and click <b>Apply Changes</b>.</li></ol>""",
     "alta": """<p><b>Get a WireGuard file from Alta Labs</b> (Route10, Control 1.0q or later):</p><ol>
 <li>Sign in at <a href="https://manage.alta.inc">manage.alta.inc</a> and open your site.</li>
 <li>Select your <b>Route10</b> and open its <b>VPN</b> tab.</li>
