@@ -9,6 +9,9 @@ Versions are `MAJOR.MINOR`; the minor number runs 0–9 and then rolls over
   short countdown, which you can cancel. In the Flatpak it notices when you've run
   the install command and then restarts into the new version.
 - README: how to clear KDE's icon cache when the taskbar keeps an old icon.
+- UniFi cloud keys: the guide, error messages and README now explain that a
+  unifi.ui.com key only covers the site group (Fabric) chosen in the top-left
+  dropdown when it was created; other groups need their own key.
 
 ## 0.6
 

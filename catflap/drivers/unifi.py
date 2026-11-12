@@ -65,8 +65,8 @@ def list_cloud_consoles(api_key: str, client: JsonClient | None = None) -> list[
         except HttpError as e:
             if e.status in (401, 403):
                 raise DriverError(
-                    "unifi.ui.com refused the API key. Use a key from unifi.ui.com (Settings > "
-                    "API Keys), created by the account that owns the console.") from e
+                    "unifi.ui.com refused the API key. Create one at unifi.ui.com: pick the site "
+                    "group (Fabric) in the top-left dropdown, then API Keys > Create New API Key.") from e
             raise
         for h in (resp or {}).get("data", []):
             if h.get("type") not in (None, "console", "network-server"):

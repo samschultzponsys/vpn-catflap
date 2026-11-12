@@ -220,13 +220,19 @@ guide, step by step.
 catflap doesn't need your router's local address. It talks to the console
 through Ubiquiti's cloud, the same way unifi.ui.com does.
 
-1. Sign in at [unifi.ui.com](https://unifi.ui.com) with the account that **owns** the
-   console. An admin who was only invited can't create the key.
-2. Open **Settings** (bottom of the left menu) → **API Keys**. On some accounts it's
-   **API** in the left menu.
-3. Click **Create API Key**, name it `catflap`, and copy it. It's shown only once.
+1. Sign in at [unifi.ui.com](https://unifi.ui.com).
+2. In the **dropdown at the top left**, choose the **site group** that contains the
+   console you want. UniFi calls these groups a Fabric or organization; consoles
+   that aren't in one are under **Independent Sites**. **A key only works for the
+   group selected when it's created.**
+3. Open **API Keys** in the left menu → **Create New API Key**, name it `catflap`, and
+   include the **Site Manager** and **Network** scopes if asked. Copy the key; it's
+   shown only once.
 4. In catflap: **Add a site → UniFi → Through the UniFi cloud**, paste the key and
    pick your console from the list.
+
+**Several groups?** Consoles in another group need that group's own key. Run
+**Add a site** again with it; each key is stored separately.
 
 From the command line:
 
@@ -239,9 +245,9 @@ catflap gateway add home --vendor unifi --cloud --console "Home UDM"
 ```
 
 **Which key is which:**
-- **Account key (unifi.ui.com, used above):** covers every console you own,
-  including multi-site setups managed from unifi.ui.com. The console must show as
-  **Online** there (Remote Management on).
+- **Cloud key (unifi.ui.com, used above):** covers the consoles in the site group
+  (Fabric) it was created in. The console must show as **Online** there (Remote
+  Management on).
 - **Console key (UniFi Network → Settings → Control Plane → Integrations):** only
   works on that console's own network. Use it with **Directly** in the guide, or
   `catflap gateway add … --url https://<console address>`.
@@ -451,9 +457,10 @@ menu. The guide asks one thing at a time:
    pick it.
 2. **UniFi (automatic):**
    - **Connect to UniFi:** *Through the UniFi cloud* (default) with the exact
-     steps to create a unifi.ui.com API key, or *Directly* when you're on the
-     console's network. No router address is needed for the cloud.
-   - **Which console?** A list of the consoles on your account.
+     steps to create a unifi.ui.com API key in the right site group, or
+     *Directly* when you're on the console's network. No router address is
+     needed for the cloud.
+   - **Which console?** A list of the consoles in that key's site group.
    - **Which site?** If the console manages several.
    - **VPN server check.** If the console has no WireGuard server yet, or it was
      never applied, the page shows exactly what to click and has a **Check

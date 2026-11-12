@@ -49,17 +49,20 @@ VENDORS = [
 UNIFI_CLOUD_HELP = """
 <p><b>Get a UniFi cloud API key</b> (one time, about a minute, from any computer):</p>
 <ol>
-<li>Sign in at <a href="https://unifi.ui.com">unifi.ui.com</a> with the UniFi account that
-    <b>owns</b> the console. An admin who was only invited to the console can't create this key.</li>
-<li>Open <b>Settings</b> (bottom of the left menu) → <b>API Keys</b>. On some accounts it's
-    called <b>API</b> in the left menu.</li>
-<li>Click <b>Create API Key</b>, name it <i>catflap</i>, and <b>copy</b> it. It's shown only once.</li>
-<li>Paste it below.</li>
+<li>Sign in at <a href="https://unifi.ui.com">unifi.ui.com</a>.</li>
+<li>In the <b>dropdown at the top left</b>, choose the <b>site group</b> (UniFi calls it a
+    Fabric or organization) that contains the console you want to reach, for example
+    <i>My Company</i>. Consoles that aren't in a group are under <b>Independent Sites</b>.
+    <b>The key only works for the group selected here.</b></li>
+<li>Open <b>API Keys</b> in the left menu and click <b>Create New API Key</b>. Name it
+    <i>catflap</i>. If you're asked for a scope, include <b>Site Manager</b> and
+    <b>Network</b>.</li>
+<li><b>Copy</b> the key (it's shown only once) and paste it below.</li>
 </ol>
-<p><small>This is an <b>account</b> key: it covers every console you own, and catflap reaches
-them through Ubiquiti's cloud, so you don't need to be at the site. Your console must show as
-<b>Online</b> on unifi.ui.com (Remote Management on). The key is saved only on this computer, in
-your keyring.<br>
+<p><small>catflap reaches your consoles through Ubiquiti's cloud, so you don't need to be at
+the site. The console must show as <b>Online</b> on unifi.ui.com. Consoles in a
+<b>different</b> group need their own key: run <i>Add a site</i> again with that group's key
+(each key is saved separately, only on this computer, in your keyring).<br>
 Not the same as the <i>console</i> key under UniFi Network → Settings → Control Plane →
 Integrations: that one only works on the console's own network (choose <i>Directly</i> below).
 </small></p>
@@ -382,8 +385,10 @@ class UnifiAccessPage(_Page):
             if not self.consoles:
                 QtWidgets.QMessageBox.warning(
                     self, "No consoles found",
-                    "That key works, but no UniFi consoles are linked to the account. Check that "
-                    "the console shows as Online on unifi.ui.com and that you signed in as its owner.")
+                    "That key works, but it can't see any consoles. A unifi.ui.com key only "
+                    "covers the site group (Fabric) that was selected in the top-left dropdown "
+                    "when the key was created. Make a key in the group that contains your "
+                    "console (or 'Independent Sites'), and check the console shows as Online.")
                 return False
             self.wiz.cloud_key = key
             if len(self.consoles) == 1 and self.final:
@@ -425,7 +430,8 @@ class ConsolePage(_Page):
         self.wiz = wiz
         self.final = final
         self.setTitle("Which console?")
-        self.setSubTitle("These are the UniFi consoles on your account.")
+        self.setSubTitle("The UniFi consoles in the site group this key was made for. Consoles in "
+                         "other groups need a key from that group.")
         lay = QtWidgets.QVBoxLayout(self)
         self.list = QtWidgets.QListWidget()
         self.list.currentRowChanged.connect(lambda _r: self.completeChanged.emit())
