@@ -145,4 +145,4 @@ jobs:
           v="${{ needs.meta.outputs.version }}"
           ls -la out
           notes=$(awk -v h="## $v" '$0==h{f=1;next} /^## /{f=0} f' CHANGELOG.md)
-          gh release create "v$v" out/* --target "$GITHUB_SHA" --title "catflap $v" --notes "${notes:-See CHANGELOG.md}"
+          gh release create "v$v" out/* --target "$GITHUB_SHA" --title "CatFlap $v" --notes "${notes:-See CHANGELOG.md}"
