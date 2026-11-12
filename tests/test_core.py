@@ -88,14 +88,44 @@ def test_connect_and_failed_health_disconnects(manager, backend):
     assert any(f.code == "no-handshake" for f in bad.findings)
 
 
-def test_connect_blocked_by_preflight(manager, backend):
+def test_connect_works_around_local_overlap(manager, backend):
     from catflap.platform.base import LocalAddress, LocalNetwork, LocalRoute
     manager.provision("home-gw", "home", ["LAN"], device="d")
-    backend.local = LocalNetwork(routes=[LocalRoute("192.168.1.0/24", "wlp0")],
+    backend.local = LocalNetwork(routes=[LocalRoute("0.0.0.0/0", "wlp0", "192.168.1.1"),
+                                         LocalRoute("192.168.1.0/24", "wlp0")],
                                  addresses=[LocalAddress("192.168.1.9/24", "wlp0")])
     manager.store.settings()["public_ip_url"] = ""
     res = manager.connect("home")
-    assert not res.ok and ("up", "home") not in backend.calls
+    assert res.ok and ("up", "home") in backend.calls
+    routes = backend.installed["home"].allowed_ips
+    assert "192.168.1.0/24" not in routes and len(routes) > 3   # split around .1 and .9
+    p = manager.store.profile("home")
+    assert p.routes[0] == "192.168.1.0/24" and p.installed_routes == routes   # profile unchanged
+    # back home without the clash: the full route is installed again
+    backend.down(p)
+    backend.local = LocalNetwork()
+    assert manager.connect("home").ok
+    assert "192.168.1.0/24" in backend.installed["home"].allowed_ips
+
+
+def test_connect_on_site_is_refused_politely(manager, backend):
+    from catflap.platform.base import LocalAddress, LocalNetwork, LocalRoute
+    manager.provision("home-gw", "home", ["LAN"], device="d", label="Home")
+    backend.local = LocalNetwork(routes=[LocalRoute("0.0.0.0/0", "wlp0", "192.168.1.1"),
+                                         LocalRoute("192.168.1.0/24", "wlp0")],
+                                 addresses=[LocalAddress("192.168.1.9/24", "wlp0")])
+    monkey = manager.preflight
+    import catflap.checks as ch
+    manager.store.settings()["public_ip_url"] = "https://x"
+    orig = ch.public_ip
+    ch.public_ip = lambda url: "203.0.113.10"   # same as the site's endpoint
+    try:
+        res = manager.connect("home")
+    finally:
+        ch.public_ip = orig
+    assert not res.ok and any(f.code == "on-site" and "You're at Home" in f.message for f in res.findings)
+    assert ("up", "home") not in backend.calls
+    del monkey
 
 
 def test_remove_with_revoke(manager, backend):

@@ -9,7 +9,15 @@ Versions are `MAJOR.MINOR`; the minor number runs 0–9 and then rolls over
   guide and the Advanced view's Color… button.
 - American spelling everywhere ("color").
 - Shorter UniFi server steps, with what matters on the client screen: click
-  **download** before **Save**, and don't regenerate the public key afterwards.
+  **download** before **Save** (only needed if catflap asks for the file), and
+  don't regenerate the public key afterwards.
+- Smarter about address clashes: when the network you're on uses the same
+  addresses as the site, catflap connects anyway, routing everything at the site
+  through the VPN except your own address and your local router, and tells you.
+- Better "you're at this site already" detection (public IP vs the site's
+  endpoint or WAN IP, or your router being the site's router), shown as a note
+  instead of an error.
+- Full messages on the site cards instead of cut-off text.
 
 ## 0.8
 

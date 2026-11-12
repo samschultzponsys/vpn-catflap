@@ -31,9 +31,36 @@ def test_clean_preflight_passes():
     assert not checks.has_errors(f) and "preflight-ok" in codes(f)
 
 
-def test_overlap_with_hotel_lan_blocks():  # problem 8
+def test_overlap_with_hotel_lan_is_worked_around():  # problem 8: no longer a refusal
     f = checks.preflight(prof(), hotel(), {}, resolver=resolver(), my_public_ip=lambda: "198.51.100.7")
-    assert "local-overlap" in codes(f) and checks.has_errors(f)
+    assert "local-overlap" in codes(f) and not checks.has_errors(f)
+    msg = next(x for x in f if x.code == "local-overlap").message
+    assert "192.168.1.1" in msg and "192.168.1.50" in msg
+
+
+def test_conflict_safe_routes_skip_self_and_local_router():
+    import ipaddress
+    routes, excluded = checks.conflict_safe_routes(["192.168.1.0/24", "10.9.0.0/24"], hotel(), "cf-home")
+    assert excluded == ["192.168.1.1", "192.168.1.50"]
+    assert "10.9.0.0/24" in routes                       # untouched
+    covered = [ipaddress.ip_network(r) for r in routes if r != "10.9.0.0/24"]
+    for ip in ("192.168.1.1", "192.168.1.50"):
+        assert not any(ipaddress.ip_address(ip) in n for n in covered)
+    for ip in ("192.168.1.2", "192.168.1.49", "192.168.1.51", "192.168.1.254"):
+        assert any(ipaddress.ip_address(ip) in n for n in covered)
+    assert all(n.prefixlen > 24 for n in covered)        # more specific than the local /24
+
+
+def test_on_site_by_router_when_public_ip_unknown():
+    p = prof(networks=[{"name": "LAN", "cidr": "192.168.1.0/24", "gateway_ip": "192.168.1.1"}])
+    f = checks.preflight(p, hotel(), {}, resolver=resolver(), my_public_ip=lambda: None)
+    assert "on-site" in codes(f)
+
+
+def test_on_site_by_wan_ip():
+    f = checks.preflight(prof(wan_ip="198.51.100.9"), hotel(), {}, resolver=resolver(),
+                         my_public_ip=lambda: "198.51.100.9")
+    assert "on-site" in codes(f)
 
 
 def test_on_site_detected():  # problem 12

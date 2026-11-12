@@ -88,13 +88,14 @@ UNIFI_SERVER_HELP = """
 <li><a href="https://unifi.ui.com">unifi.ui.com</a> → your console → <b>Network → Settings → VPN →
     VPN Server → Create New → WireGuard</b>. Keep port <b>51820</b>. For the subnet use a
     range used nowhere else, e.g. <b>10.250.1.1/24</b> (10.250.2.1/24 at your next site).</li>
-<li>UniFi asks for a client: name it after <b>this computer</b>, then click <b>download</b>
-    (top of the client window, next to the QR code) <b>before Save</b>. That file is what
-    catflap needs.</li>
+<li>UniFi asks for a client: name it after <b>this computer</b>. You only need its file if
+    catflap asks for one later. To be safe, click <b>download</b> (top of the client window,
+    next to the QR code) <b>before Save</b>; it can't be downloaded again after.</li>
 <li><b>Save</b>, then <b>Apply Changes</b>, then click <b>Check again</b> here.</li>
 </ol>
 <small>Leave the rest as it is. Don't press ↻ next to the Public Key after downloading:
-it makes the file stop working.</small>
+it makes the file stop working. If catflap sets up its own client for this computer
+(named <i>catflap-…</i>), you can delete this one afterwards.</small>
 """
 
 FILE_HELP = {

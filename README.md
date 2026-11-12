@@ -268,13 +268,16 @@ for this (problem #1) and shows these steps:
 1. **Network → Settings → VPN → VPN Server → Create New → WireGuard.** Keep port
    51820. For the subnet, use a range used nowhere else, different per site:
    `10.250.1.1/24`, then `10.250.2.1/24`, and so on.
-2. UniFi asks for a client: name it after this computer and click **download** at
-   the top of the client window **before Save**. That's the file catflap needs.
+2. UniFi asks for a client: name it after this computer. You only need its file if
+   catflap later asks for one (when it can't create its own client through the cloud).
+   To be safe, click **download** at the top of the client window **before Save**.
+   It can't be downloaded after.
 3. **Save**, then **Apply Changes**.
 
 In the client window, leave Pre-Shared Key and Networks Behind Client off. Don't
 press ↻ next to the Public Key after downloading: it makes the file stop
-working.
+working. If catflap creates its own client (`catflap-…`), you can delete this
+one afterwards.
 
 **What the cloud allows:**
 - UniFi's official API, which is all that unifi.ui.com keys reach, covers sites,
@@ -617,7 +620,7 @@ Each item maps to a numbered problem in [docs/TEST-CHECKLIST.md](docs/TEST-CHECK
 | 5 | Gateway's ULA IPv6 | IPv6 addresses and routes dropped; `ipv6.method disabled` |
 | 6 | Idle tunnel drops behind NAT | `PersistentKeepalive = 25` |
 | 7 | Autoconnect at login | `connection.autoconnect no` |
-| 8 | Subnet overlaps (local LAN, other tunnels, duplicate VPN subnets) | Pre-flight blocks clashes; warnings; `suggest-subnet` |
+| 8 | Subnet overlaps (local LAN, other tunnels, duplicate VPN subnets) | Same addresses where you are as at the site: connects anyway, routing around your own address and local router. Clashes with another active tunnel are blocked. Warnings; `suggest-subnet` |
 | 9 | Dynamic WAN IP | Uses DDNS hostname when available; warns on raw IP or stale DDNS |
 | 10 | CGNAT | Compares gateway WAN IP to 100.64.0.0/10 and private ranges; warns or blocks |
 | 11 | Shared `.conf` between devices | Keys generated per device on the device; duplicate keys refused; per-device revoke |
@@ -736,8 +739,8 @@ also set `CATFLAP_SECRETS=file`.
 | Message | Meaning / fix |
 |---|---|
 | *No WireGuard handshake (N bytes sent, 0 received)* | Server not created/applied (#1); UDP port not forwarded / CGNAT (#10); stale endpoint (#9); client revoked or its key used elsewhere (#11) |
-| *Site network X overlaps local network Y* | You're on a LAN using the same subnet (hotel/client site). Route fewer networks, or renumber the site |
-| *You are on <site>'s LAN already* / *reachable without the tunnel* | You're on site, or linked via Site Magic: no tunnel needed |
+| *The network you're on now uses the same addresses as …* | Not an error: catflap connects with a workaround. Everything at the site is reachable except your own address and your local router's. To avoid it entirely, give the site a less common range (e.g. 10.20.x.0/24) |
+| *You're at <site> right now* / *reachable without the tunnel* | You're on site, or linked via Site Magic: no VPN needed |
 | *Polkit denied the change* | Run as your desktop user in an active session, not with sudo or SSH |
 | *the UniFi classic API refused the API key* | Add a local admin with `--username`, or use `catflap import` |
 | *gateway TLS certificate changed* | The console's certificate changed; re-pin with `catflap gateway add … --tofu` |

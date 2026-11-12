@@ -28,7 +28,7 @@ from . import autostart, checks, update
 from .core import Manager
 from .drivers import DRIVERS
 from .model import Profile
-from .ui_common import (GREY, ColorDialog, app_icon, QtCore, QtGui, QtWidgets, dot_icon, friendly_error, make_icon, require_qt, run_bg, run_blocking, status_text)
+from .ui_common import (GREY, INFO, ColorDialog, app_icon, QtCore, QtGui, QtWidgets, dot_icon, friendly_error, make_icon, require_qt, run_bg, run_blocking, status_text)
 from .version import __version__
 
 __all__ = ["MainWindow", "TrayApp", "make_icon", "main"]
@@ -426,6 +426,8 @@ class TrayApp(QtCore.QObject if QtCore else object):
                 st = self.status.get(p.name)
                 active = bool(st and st.active)
                 text = status_text(st, self.errors.get(p.name), p.name in self.busy)[0]
+                if len(text) > 70:
+                    text = text[:68] + "…"
                 verb = "Disconnect" if active else "Connect"
                 a = m.addAction(dot_icon(p.color or GREY, active), f"{p.display}: {text}  ({verb})")
                 a.setEnabled(p.name not in self.busy)
@@ -507,9 +509,15 @@ class TrayApp(QtCore.QObject if QtCore else object):
         self.busy.discard(name)
         p = self.profiles.get(name)
         label = p.display if p else name
+        codes = {f.code: f for f in (res.findings if res is not None else [])}
         if err:
             self.errors[name] = friendly_error(err)
             self.tray.showMessage(f"catflap: {label}", self.errors[name], QtWidgets.QSystemTrayIcon.Critical)
+        elif connecting and res is not None and not res.ok and "on-site" in codes:
+            self.errors[name] = INFO + codes["on-site"].message
+            self.checks[name] = res.findings
+            self.tray.showMessage(f"catflap: {label}", codes["on-site"].message,
+                                  QtWidgets.QSystemTrayIcon.Information, 6000)
         elif connecting and res is not None and not res.ok:
             bad = [f.message for f in res.findings if f.level == checks.ERROR]
             self.errors[name] = bad[0] if bad else "failed"
@@ -520,8 +528,14 @@ class TrayApp(QtCore.QObject if QtCore else object):
             self.errors.pop(name, None)
             if res is not None:
                 self.checks[name] = res.findings
-            self.tray.showMessage("catflap", f"{label} {'connected' if connecting else 'disconnected'}",
-                                  QtWidgets.QSystemTrayIcon.Information, 3000)
+            if connecting and "local-overlap" in codes:
+                self.errors[name] = (INFO + "Your current network uses the same addresses as "
+                                     f"{label}; catflap is routing around it.")
+                self.tray.showMessage(f"catflap: {label} connected", codes["local-overlap"].message,
+                                      QtWidgets.QSystemTrayIcon.Information, 8000)
+            else:
+                self.tray.showMessage("catflap", f"{label} {'connected' if connecting else 'disconnected'}",
+                                      QtWidgets.QSystemTrayIcon.Information, 3000)
         self.poll()
 
     def check_updates(self, interactive: bool) -> None:

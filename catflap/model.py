@@ -117,6 +117,7 @@ class Profile:
     created: str = ""
     color: str = ""                  # tray color for this connection, "#RRGGBB"
     label: str = ""                  # friendly display name, e.g. "Ponsys Office"
+    installed_routes: list[str] = field(default_factory=list)  # routes in the OS connection now
 
     @property
     def display(self) -> str:

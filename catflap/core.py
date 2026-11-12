@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import socket
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable
 
@@ -187,6 +187,7 @@ class Manager:
             self.secrets.set(profile_key(p.name, "preshared_key"), cfg.preshared_key)
         if install:
             p.backend_id = self.backend.install(p, cfg)
+            p.installed_routes = list(cfg.allowed_ips)
         self.store.put_profile(p)
         self.store.save()
         return p
@@ -430,6 +431,7 @@ class Manager:
         cfg.endpoint_host = p.endpoint_host
         res = safety.make_safe(cfg, p.routes)
         p.backend_id = self.backend.install(p, res.config)
+        p.installed_routes = res.config.allowed_ips
         self.store.put_profile(p)
         self.store.save()
         return p
@@ -460,14 +462,30 @@ class Manager:
         findings = self.preflight(name)
         if checks.has_errors(findings) and not force:
             return Outcome(False, findings, p)
+        # Same addresses here as at the site? Route around the local router (#8).
+        routes, excluded = checks.conflict_safe_routes(p.routes, self.backend.local_network(), p.ifname)
+        if routes != (p.installed_routes or p.routes):
+            p = self._install_routes(p, routes)
         self.backend.up(p)
         self.backend.wait_active(p, 10)
-        h = checks.health(p, self.backend, wait=float(self.store.settings().get("health_wait", 8)))
+        target = p.ping_target if p.ping_target not in excluded else None
+        h = checks.health(replace(p, ping_target=target), self.backend,
+                          wait=float(self.store.settings().get("health_wait", 8)))
         findings = [f for f in findings if f.code != "preflight-ok"] + h
         ok = not checks.has_errors(h)
         if not ok and not keep_on_failure:
             self.backend.down(p)
         return Outcome(ok, findings, p)
+
+    def _install_routes(self, p: Profile, routes: list[str]) -> Profile:
+        """(Re)create the OS connection with these routes, keeping the profile's own."""
+        cfg = self._peer_config(p)
+        res = safety.make_safe(cfg, routes)
+        p.backend_id = self.backend.install(p, res.config)
+        p.installed_routes = res.config.allowed_ips
+        self.store.put_profile(p)
+        self.store.save()
+        return p
 
     def disconnect(self, name: str) -> None:
         self.backend.down(self.store.profile(name))

@@ -50,6 +50,50 @@ def public_ip(url: str = "https://api.ipify.org", timeout: float = 5) -> str | N
         return None
 
 
+def conflict_safe_routes(routes: list[str], local: LocalNetwork,
+                         ifname: str) -> tuple[list[str], list[str]]:
+    """Split site routes around the addresses that must stay local.
+
+    When the network you're on uses the same addresses as the site (both
+    10.0.30.0/24, say), routing the whole site range into the tunnel would cut
+    you off from your own router, and with it the internet. Instead, route the
+    site range minus this computer's address(es) and the local router(s) as
+    more-specific routes: everything at the site stays reachable except those
+    few addresses. Returns (routes, excluded addresses).
+    """
+    avoid: set[ipaddress.IPv4Address] = set()
+    for a in local.addresses:
+        if a.dev != ifname:
+            try:
+                avoid.add(ipaddress.ip_interface(a.cidr).ip)
+            except ValueError:
+                pass
+    for r in local.routes:
+        if r.dev != ifname and r.gateway:
+            try:
+                avoid.add(ipaddress.ip_address(r.gateway))
+            except ValueError:
+                pass
+    out: list[str] = []
+    excluded: set[str] = set()
+    for route in routes:
+        n = netutil.net(route)
+        hits = sorted(ip for ip in avoid if ip.version == n.version and ip in n)
+        if not hits:
+            out.append(str(n))
+            continue
+        pieces = [n]
+        for ip in hits:
+            excluded.add(str(ip))
+            nxt = []
+            host = ipaddress.ip_network(f"{ip}/{n.max_prefixlen}")
+            for piece in pieces:
+                nxt.extend(piece.address_exclude(host) if ip in piece else [piece])
+            pieces = nxt
+        out.extend(str(x) for x in sorted(pieces))
+    return out, sorted(excluded, key=ipaddress.ip_address)
+
+
 def has_errors(findings: list[Finding]) -> bool:
     return any(f.level == ERROR for f in findings)
 
@@ -107,22 +151,33 @@ def preflight(profile: Profile, local: LocalNetwork, others: dict[str, tuple[Pro
               and any(netutil.overlaps(a.cidr.split("/")[0] + "/32", m) for m in mine)]
 
     if local_conflicts:
-        same_wan = False
-        if on_lan and my_public_ip and endpoint_ips:
+        site = profile.display
+        on_site = False
+        if on_lan and my_public_ip:
             pub = my_public_ip()
-            same_wan = pub is not None and pub in endpoint_ips
-        if same_wan:
+            if pub is not None:
+                on_site = pub in endpoint_ips or pub == profile.wan_ip
+            else:
+                # Can't check the public IP: fall back to "your router is the site's router".
+                site_gws = {n.get("gateway_ip") for n in profile.networks if n.get("gateway_ip")}
+                local_gws = {r.gateway for r in local.routes
+                             if netutil.is_default_route(r.dest) and r.gateway}
+                on_site = bool(site_gws & local_gws)
+        if on_site:
             out.append(Finding(ERROR, "on-site",
-                               f"You are on {profile.name}'s LAN already (your public IP is the "
-                               "site's endpoint). No tunnel needed; connecting would duplicate "
-                               "routes.", 12))
+                               f"You're at {site} right now (you're on its network), so you don't "
+                               "need the VPN: everything there is already reachable.", 12))
         else:
-            for m, r in local_conflicts:
-                out.append(Finding(ERROR, "local-overlap",
-                                   f"Site network {m} overlaps local network {r.dest} on "
-                                   f"{r.dev}. Traffic for it would go to the wrong place (common "
-                                   "with 192.168.0.0/24 and 192.168.1.0/24 at hotels/clients). "
-                                   "Remove that route from the profile or renumber the site.", 8))
+            safe, excluded = conflict_safe_routes(mine, local, profile.ifname)
+            nets = ", ".join(sorted({r.dest for _, r in local_conflicts}))
+            devs = ", ".join(sorted({r.dev for _, r in local_conflicts}))
+            keep = ", ".join(excluded) if excluded else "nothing"
+            out.append(Finding(WARN, "local-overlap",
+                               f"The network you're on now ({nets} on {devs}) uses the same "
+                               f"addresses as {site}. catflap works around it: everything at "
+                               f"{site} goes through the VPN except {keep} (this computer and your "
+                               "local router), so your internet keeps working. Devices on the "
+                               "network you're on now can't be reached while connected.", 8))
 
     # -- overlaps with other catflap tunnels (#8) -------------------------------
     for name, (other, active) in others.items():

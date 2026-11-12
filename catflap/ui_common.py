@@ -240,15 +240,22 @@ def friendly_error(e: BaseException, address: str = "") -> str:
     return msg[0].upper() + msg[1:]
 
 
+BLUE = "#3B82F6"
+INFO = "info:"   # prefix for informational notes kept alongside errors
+
+
 def status_text(st: Any, err: str | None, busy: bool = False) -> tuple[str, str]:
-    """(text, color) for a site's state, in plain words."""
+    """(text, color) for a site's state, in plain words. ``err`` may be an error or,
+    prefixed with INFO, a note (e.g. "you're at this site" or a conflict workaround)."""
+    note = err[len(INFO):] if err and err.startswith(INFO) else None
     if busy:
         return "Working…", GREY
     if st is not None and getattr(st, "active", False):
-        return "Connected", GREEN
+        return (f"Connected. {note}" if note else "Connected"), GREEN
+    if note:
+        return note, BLUE
     if err:
-        first = err.splitlines()[0]
-        return f"Couldn't connect: {first[:90]}", RED
+        return f"Couldn't connect: {err.splitlines()[0]}", RED
     return "Not connected", GREY
 
 
