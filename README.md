@@ -225,9 +225,17 @@ through Ubiquiti's cloud, the same way unifi.ui.com does.
    console you want. UniFi calls these groups a Fabric or organization; consoles
    that aren't in one are under **Independent Sites**. **A key only works for the
    group selected when it's created.**
-3. Open **API Keys** in the left menu → **Create New API Key**, name it `catflap`, and
-   include the **Site Manager** and **Network** scopes if asked. Copy the key; it's
-   shown only once.
+3. Open **API Keys** in the left menu → **Create New API Key**:
+   - **Name:** `catflap`.
+   - **Expiration:** the longest you're comfortable with; a year is a good balance.
+     When it expires, catflap says so, and you paste a new key in **Advanced view →
+     Gateways → Change API key**.
+   - **Minimum scope:**
+     - **Site Manager:** on. It lets catflap find your consoles.
+     - **UniFi Applications:** on, with only **Network** (Protect isn't needed).
+     - **Sites:** the sites you want to reach, or All Sites.
+
+   Copy the key; it's shown only once.
 4. In catflap: **Add a site → UniFi → Through the UniFi cloud**, paste the key and
    pick your console from the list.
 
@@ -256,13 +264,22 @@ catflap gateway add home --vendor unifi --cloud --console "Home UDM"
 VPN Server → Create New → WireGuard**, then **Create / Apply Changes**. The guide
 checks for this and shows these steps if it's missing (problem #1).
 
-**How it works:**
-- catflap uses UniFi's official API for sites and networks. For the WireGuard
-  server and its clients, it uses UniFi's internal API through the same cloud
-  connector.
-- If Ubiquiti ever limits the connector to the official API (it did briefly in
-  November 2026), catflap says so. You can then use **"UniFi, but I'd rather use a
-  downloaded WireGuard file"** in the guide.
+**What the cloud allows:**
+- UniFi's official API, which is all that unifi.ui.com keys reach, covers sites,
+  networks and the list of VPN servers. It **can't** read a WireGuard server's
+  details or create VPN clients (checked against Network 10.6).
+- catflap first tries UniFi's internal API through the cloud connector. Keys made
+  with the new **Create New API Key** screen are refused there. In that case the
+  guide says so and offers **Continue with a downloaded WireGuard file**.
+- With that file, catflap still checks the WireGuard server exists, still lists
+  your networks to tick, and still applies every safety fix.
+
+**Downloading the file:** open the console on unifi.ui.com → **Network → Settings →
+VPN → VPN Server**, open the WireGuard server, then **Add Client** (one per computer)
+and **Download** its configuration.
+
+**Fully automatic** creation of clients works with **Directly** (a console key,
+while on the console's network) or a self-hosted controller.
 
 ### TP-Link Omada (typed in)
 

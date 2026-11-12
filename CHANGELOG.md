@@ -3,7 +3,15 @@
 Versions are `MAJOR.MINOR`; the minor number runs 0–9 and then rolls over
 (1.9 → 2.0). Every release is tagged `vMAJOR.MINOR`.
 
-## Unreleased
+## 0.7
+
+- UniFi through the cloud: when the cloud connector refuses UniFi's internal API
+  (it does for keys made with the new "Create New API Key" screen), the guide
+  explains why and continues with a downloaded WireGuard file. It still checks
+  the WireGuard server exists and lists your networks from the API.
+- The guide lists the minimum key scope (Site Manager + UniFi Applications →
+  Network, the sites you need) and recommends an expiry; an expired key gets a
+  clear message.
 
 - Updater: once the new version is installed, catflap restarts by itself after a
   short countdown, which you can cancel. In the Flatpak it notices when you've run

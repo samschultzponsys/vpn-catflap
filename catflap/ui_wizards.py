@@ -54,9 +54,16 @@ UNIFI_CLOUD_HELP = """
     Fabric or organization) that contains the console you want to reach, for example
     <i>My Company</i>. Consoles that aren't in a group are under <b>Independent Sites</b>.
     <b>The key only works for the group selected here.</b></li>
-<li>Open <b>API Keys</b> in the left menu and click <b>Create New API Key</b>. Name it
-    <i>catflap</i>. If you're asked for a scope, include <b>Site Manager</b> and
-    <b>Network</b>.</li>
+<li>Open <b>API Keys</b> in the left menu and click <b>Create New API Key</b>:
+  <ul>
+  <li><b>Name:</b> <i>catflap</i></li>
+  <li><b>Expiration:</b> the longest you're comfortable with (a year is a good balance).
+      When it expires, catflap tells you; paste a new key in Advanced view → Gateways →
+      Change API key.</li>
+  <li><b>Site Manager:</b> on (lets catflap find your consoles)</li>
+  <li><b>UniFi Applications:</b> on, with only <b>Network</b> (Protect isn't needed), and
+      <b>Sites:</b> the sites you want to reach (or All Sites)</li>
+  </ul></li>
 <li><b>Copy</b> the key (it's shown only once) and paste it below.</li>
 </ol>
 <p><small>catflap reaches your consoles through Ubiquiti's cloud, so you don't need to be at
@@ -302,6 +309,7 @@ class VendorPage(_Page):
         w.conf_path = None
         w.manual_cfg = None
         w.file_routes = []
+        w.unifi_file = False
         if self.choice == "existing":
             w.gateway = self.existing.currentData()
             w.sites = []
@@ -516,13 +524,25 @@ class ServerPage(_Page):
         lay.addWidget(self.text, 1)
         self.again = QtWidgets.QPushButton("Check again")
         self.again.clicked.connect(self.check)
+        self.file_btn = QtWidgets.QPushButton("Continue with a downloaded WireGuard file")
+        self.file_btn.setVisible(False)
+        self.file_btn.clicked.connect(self._use_file)
         row = QtWidgets.QHBoxLayout()
         row.addWidget(self.again)
         row.addStretch(1)
+        row.addWidget(self.file_btn)
         lay.addLayout(row)
 
     def initializePage(self) -> None:  # noqa: N802 (Qt API)
+        self.wiz.unifi_file = False
+        self.file_btn.setVisible(False)
         self.check()
+
+    def _use_file(self) -> None:
+        self.wiz.unifi_file = True
+        self.ok = True
+        self.completeChanged.emit()
+        self.wiz.next()
 
     def check(self) -> None:
         self.ok = False
@@ -532,15 +552,36 @@ class ServerPage(_Page):
         m, gw, site = self.wiz.m, self.wiz.gateway, self.wiz.site
 
         def work():
+            from .drivers.unifi import ConnectorRefused
             d = m.driver(gw)
-            srv = d.get_wireguard_server(site)
+            nets = d.list_networks(site)        # official API: works through the cloud
+            try:
+                srv = d.get_wireguard_server(site)
+            except ConnectorRefused as e:
+                servers = d.wireguard_servers_official(site)
+                return ("refused", nets, str(e), servers)
             wan = d.get_wan_info(site)
-            nets = d.list_networks(site)
             return srv, wan, nets
         run_bg(work, self._checked)
 
     def _checked(self, res, err) -> None:
         self.again.setEnabled(True)
+        if err is None and res and res[0] == "refused":
+            _, nets, why, servers = res
+            self.wiz.networks = nets
+            if not any(sv.get("enabled", True) for sv in servers):
+                self.text.setHtml(UNIFI_SERVER_HELP)      # problem #1: create the server first
+                return
+            self.text.setHtml(
+                "<p><b>catflap can see your sites and networks, but UniFi's cloud doesn't let it "
+                "set up the VPN client for you.</b></p>"
+                "<p>Through unifi.ui.com, UniFi only offers its official API, which can't read the "
+                "WireGuard server or create clients. That's fine: you'll download this "
+                "computer's WireGuard file from UniFi (about a minute, steps on the next page) and "
+                "still pick the networks from the list.</p>"
+                f"<p><small>Details: {why}</small></p>")
+            self.file_btn.setVisible(True)
+            return
         if err is not None:
             msg = friendly_error(err)
             if "No WireGuard VPN server" in msg or "not fully created" in msg:
@@ -578,7 +619,7 @@ class ServerPage(_Page):
         return self.ok
 
     def nextId(self) -> int:  # noqa: N802 (Qt API)
-        return P_NETWORKS
+        return P_FILE if self.wiz.unifi_file else P_NETWORKS
 
 
 class NetworksPage(_Page):
@@ -730,7 +771,8 @@ class FilePage(_Page):
         return True
 
     def nextId(self) -> int:  # noqa: N802 (Qt API)
-        return P_SITE_NETS
+        # UniFi through the cloud: the networks already came from the API, pick from those.
+        return P_NETWORKS if (self.wiz.unifi_file and self.wiz.networks) else P_SITE_NETS
 
 
 class ManualPage(_Page):
@@ -981,6 +1023,7 @@ class SiteWizard(_Wizard):
         self.networks: list = []
         self.routes: list[str] = []
         self.file_routes: list[str] = []
+        self.unifi_file = False
         self.conf_path: str | None = None
         self.manual_cfg = None
         self.endpoint: str | None = None

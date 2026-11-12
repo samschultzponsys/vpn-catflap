@@ -275,3 +275,37 @@ def test_update_dialog_auto_restart_countdown_can_be_cancelled(qapp, monkeypatch
     d.reject()                                 # "Don't restart now"
     qapp.processEvents()
     assert not d.restart_requested and not d._tick_timer.isActive()
+
+
+def test_site_wizard_unifi_cloud_refused_falls_back_to_file(qapp, manager, no_popups, monkeypatch, unifi_conf):
+    from catflap.drivers import unifi
+    from catflap.drivers.unifi import ConnectorRefused
+    from conftest import FakeDriver
+    monkeypatch.setattr(unifi, "list_cloud_consoles", lambda key: CONSOLES[:1])
+    def refuse(self, site, name=None):
+        raise ConnectorRefused("only the official API (Ubiquiti said: HTTP 403: insufficient permissions)")
+    monkeypatch.setattr(FakeDriver, "get_wireguard_server", refuse)
+    monkeypatch.setattr(FakeDriver, "wireguard_servers_official",
+                        lambda self, site: [{"name": "WG", "enabled": True}], raising=False)
+    w = ui_wizards.SiteWizard(manager)
+    w.show()
+    pick(w, "unifi")
+    w.currentPage().key.setText("K")
+    w.next()                      # console page
+    w.next()                      # site page
+    w.next()                      # server page
+    server = w.currentPage()
+    wait_for(qapp, lambda: not server.file_btn.isHidden())
+    assert "official API" in server.text.toPlainText()
+    server.file_btn.click()
+    assert w.currentId() == ui_wizards.P_FILE
+    w.currentPage().path.setText(str(unifi_conf))
+    w.next()
+    assert w.currentId() == ui_wizards.P_NETWORKS          # networks still come from the API
+    assert w.currentPage().chosen() == ["192.168.1.0/24"]
+    w.next()
+    w.currentPage().name.setText("HQ")
+    w.next()
+    assert w.currentId() == ui_wizards.P_DONE, no_popups
+    p = w.result.profile
+    assert p.vendor == "unifi" and p.routes == ["192.168.1.0/24"] and p.peer_public_key

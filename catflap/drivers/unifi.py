@@ -49,6 +49,15 @@ def _default_client(gw: GatewayConfig, headers: dict[str, str]) -> JsonClient:
 CLOUD_API = "https://api.ui.com"
 
 
+class ConnectorRefused(DriverError):
+    """Ubiquiti's cloud connector refused a request outside the official API.
+
+    The official (integration) API can list sites, networks and VPN servers but
+    not WireGuard server details or clients, so catflap then continues with a
+    WireGuard file downloaded from the UniFi console.
+    """
+
+
 def cloud_url(console_id: str) -> str:
     return f"{CLOUD_API}/v1/connector/consoles/{console_id}"
 
@@ -118,6 +127,12 @@ class UniFiDriver(Driver):
             return self._integration.get(f"{self.prefix}/integration{path}", **kw)
         except HttpError as e:
             if e.status in (401, 403):
+                if self.cloud:
+                    raise DriverError(
+                        f"unifi.ui.com refused the API key ({e}). It may have expired, or not "
+                        "include the Network application or this site. Create a new key at "
+                        "unifi.ui.com (site group dropdown > API Keys > Create New API Key) and "
+                        "paste it in Advanced view > Gateways > Change API key.") from e
                 raise DriverError(
                     "UniFi rejected the API key. Create one under Settings > Control Plane > "
                     "Integrations and run 'catflap gateway set-key'.") from e
@@ -165,6 +180,11 @@ class UniFiDriver(Driver):
             try:
                 return self._classic.request(method, f"{self.prefix}{path}", body=body)[2]
             except HttpError as e:
+                if e.status in (401, 403) and self.cloud:
+                    raise ConnectorRefused(
+                        "UniFi's cloud connector only lets this key use UniFi's official API, "
+                        "which can't read WireGuard servers or create VPN clients. "
+                        f"(Ubiquiti said: {e})") from e
                 if e.status in (401, 403) and attempt == 0 and not self._logged_in:
                     self._login()
                     continue
@@ -230,6 +250,11 @@ class UniFiDriver(Driver):
         return [n for n in self._classic_data(f"/api/s/{site.ref}/rest/networkconf")
                 if n.get("purpose") == "remote-user-vpn"
                 and n.get("vpn_type") in ("wireguard-server", "wireguard")]
+
+    def wireguard_servers_official(self, site: Site) -> list[dict[str, Any]]:
+        """WireGuard servers as the official API sees them (name/id/enabled only)."""
+        return [s for s in self._paged(f"/v1/sites/{site.id}/vpn/servers")
+                if "WIREGUARD" in str(s.get("type", "")).upper()]
 
     def get_wireguard_server(self, site: Site, name: str | None = None) -> WireGuardServer:
         integration_names: list[str] | None = None

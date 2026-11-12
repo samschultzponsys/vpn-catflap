@@ -140,7 +140,7 @@ def test_cloud_mode_uses_connector_and_key(monkeypatch):
     assert all(h.get("X-API-KEY") == "CLOUDKEY" for *_, h in log)
 
 
-def test_cloud_401_does_not_ask_for_local_login():
+def _old_cloud_401_test_replaced_by_connector_refused():
     r = base_routes()
     r[("GET", "/proxy/network/api/s/default/rest/networkconf")] = HttpError(403, "insufficient permissions")
     gw = GatewayConfig(name="g", vendor="unifi", url="https://api.ui.com/v1/connector/consoles/X",
@@ -166,3 +166,26 @@ def test_list_cloud_consoles_bad_key():
     c = FakeClient({("GET", "/v1/hosts"): HttpError(401, "unauthorized")}, [], {})
     with pytest.raises(DriverError, match="unifi.ui.com"):
         unifi.list_cloud_consoles("bad", client=c)
+
+
+def test_cloud_classic_refusal_is_connector_refused():
+    from catflap.drivers.unifi import ConnectorRefused
+    r = base_routes()
+    r[("GET", "/proxy/network/api/s/default/rest/networkconf")] = HttpError(403, "insufficient permissions")
+    gw = GatewayConfig(name="g", vendor="unifi", url="https://api.ui.com/v1/connector/consoles/X",
+                       options={"mode": "cloud"})
+    d = UniFiDriver(gw, {"api_key": "K"}, client_factory=lambda gw, h: FakeClient(r, [], h))
+    with pytest.raises(ConnectorRefused, match="insufficient permissions"):
+        d.get_wireguard_server(SITE)
+    assert [s["name"] for s in d.wireguard_servers_official(SITE)] == ["Teleport-ish"]
+    assert [n.cidr for n in d.list_networks(SITE)] == ["192.168.1.0/24", "192.168.20.0/24"]
+
+
+def test_cloud_expired_key_message():
+    r = base_routes()
+    r[("GET", INT)] = HttpError(401, "unauthorized")
+    gw = GatewayConfig(name="g", vendor="unifi", url="https://api.ui.com/v1/connector/consoles/X",
+                       options={"mode": "cloud"})
+    d = UniFiDriver(gw, {"api_key": "K"}, client_factory=lambda gw, h: FakeClient(r, [], h))
+    with pytest.raises(DriverError, match="expired"):
+        d.list_sites()
