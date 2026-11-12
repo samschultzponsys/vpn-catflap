@@ -246,3 +246,32 @@ def test_after_restart_messages(monkeypatch):
     assert ui_update.after_restart_message(s) is None
     s["pending_update"] = "1.4"
     assert ui_update.after_restart_message(s)[0] == "Update not installed yet"
+
+
+def test_update_dialog_restarts_once_installed(qapp, monkeypatch, tmp_path):
+    from catflap import update, ui_update
+    rel = update.ReleaseInfo(version="9.9", url="u", assets={"catflap-9.9.flatpak": "https://dl/x.flatpak"})
+    st = update.check({}, fetch=lambda: rel, install=update.InstallInfo("flatpak", "io.x.CatFlap", True))
+    d = ui_update.UpdateDialog(st, settings={})
+    d.COUNTDOWN = 0
+    d.WATCH_MS = 10
+    monkeypatch.setattr(update, "apply_update", lambda s: update.UpdateResult(
+        False, "x", restart=True, downloaded=tmp_path / "x.flatpak", commands=["flatpak install …"]))
+    versions = iter(["0.6", "9.9"])          # first check: not yet installed; then installed
+    monkeypatch.setattr(update, "installed_version", lambda info: next(versions, "9.9"))
+    d.do_update()
+    wait_for(qapp, lambda: d.restart_requested, timeout=5)
+    assert d.restart_requested
+
+
+def test_update_dialog_auto_restart_countdown_can_be_cancelled(qapp, monkeypatch):
+    from catflap import update, ui_update
+    rel = update.ReleaseInfo(version="9.9", url="u", assets={})
+    st = update.check({}, fetch=lambda: rel, install=update.InstallInfo("rpm", automatic=True))
+    d = ui_update.UpdateDialog(st, settings={})
+    monkeypatch.setattr(update, "apply_update", lambda s: update.UpdateResult(True, "installed", restart=True))
+    d.do_update()
+    assert "Restarting catflap in" in d.status.text()
+    d.reject()                                 # "Don't restart now"
+    qapp.processEvents()
+    assert not d.restart_requested and not d._tick_timer.isActive()

@@ -627,10 +627,11 @@ ever sees the public key.
   download page** buttons
 - one button to update for you
 
-When the update is installed, **Restart catflap** closes the app and opens the
-new version. Connected sites stay connected. After the restart, catflap
-confirms the version it is now running, or tells you if the update wasn't
-installed yet.
+When the update is installed, catflap **restarts by itself** after a short
+countdown (**Don't restart now** cancels it), or you can click **Restart
+catflap**. It closes the app and opens the new version. Connected sites stay
+connected. After the restart, catflap confirms the version it is now running, or
+tells you if the update wasn't installed yet.
 
 **Flatpak specifics.** A sandboxed app can't install updates on the host by
 itself, so **Download and install** downloads `catflap-<v>.flatpak` to
@@ -640,8 +641,10 @@ itself, so **Download and install** downloads `catflap-<v>.flatpak` to
 flatpak install --user -y ~/Downloads/catflap-<v>.flatpak
 ```
 
-Run it, then click **Restart catflap**. The restart uses the Flatpak portal's
-"latest version" launch, so the reopened app is the new version. To let catflap
+Run it in a terminal. catflap checks every few seconds which version is
+installed, and as soon as the install finishes it closes and reopens as the new
+version by itself. The restart uses the Flatpak portal's "latest version"
+launch, so the reopened app really is the new one. To let catflap
 run the install command itself, grant this once (it lets the app run commands
 on the host, so it's off by default):
 
@@ -702,6 +705,7 @@ also set `CATFLAP_SECRETS=file`.
 | *Polkit denied the change* | Run as your desktop user in an active session, not with sudo or SSH |
 | *the UniFi classic API refused the API key* | Add a local admin with `--username`, or use `catflap import` |
 | *gateway TLS certificate changed* | The console's certificate changed; re-pin with `catflap gateway add … --tofu` |
+| The taskbar or app menu still shows an old catflap icon after an update | KDE caches icons and doesn't notice Flatpak updates. Run `rm -f ~/.cache/icon-cache.kcache`, then log out and back in |
 | *NetworkManager did not keep the safe settings* | An NM plugin or policy overrode them; the connection was removed for safety. Please file a bug |
 
 ## CGNAT sites

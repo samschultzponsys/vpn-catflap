@@ -237,6 +237,31 @@ def restart_command(info: InstallInfo | None = None) -> list[str]:
     return [exe] if exe else [sys.executable, "-m", "catflap", "tray"]
 
 
+def installed_version(info: InstallInfo | None = None,
+                      run: Callable[[list[str]], "subprocess.CompletedProcess"] | None = None) -> str | None:
+    """The version that a fresh start would run (i.e. what's installed on disk now),
+    or None if it can't be told. For a Flatpak this asks the portal to run the
+    latest installed version, so it notices an update installed from a terminal."""
+    info = info or detect_install()
+    if info.method == "flatpak":
+        cmd = ["flatpak-spawn", "--latest-version", "catflap", "--json", "version"]
+    elif info.method == "windows":
+        return None
+    else:
+        exe = shutil.which("catflap")
+        cmd = ([exe] if exe else [sys.executable, "-m", "catflap"]) + ["--json", "version"]
+    run = run or (lambda c: subprocess.run(c, capture_output=True, text=True, timeout=20))
+    try:
+        res = run(cmd)
+        if res.returncode != 0:
+            return None
+        v = json.loads(res.stdout).get("version")
+        _v.parse(v)
+        return v
+    except Exception:  # noqa: BLE001 - only a hint
+        return None
+
+
 def restart(info: InstallInfo | None = None) -> None:
     """Start the new catflap; the caller then quits this one."""
     subprocess.Popen(restart_command(info), start_new_session=True,

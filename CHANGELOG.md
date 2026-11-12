@@ -3,6 +3,13 @@
 Versions are `MAJOR.MINOR`; the minor number runs 0–9 and then rolls over
 (1.9 → 2.0). Every release is tagged `vMAJOR.MINOR`.
 
+## Unreleased
+
+- Updater: once the new version is installed, catflap restarts by itself after a
+  short countdown, which you can cancel. In the Flatpak it notices when you've run
+  the install command and then restarts into the new version.
+- README: how to clear KDE's icon cache when the taskbar keeps an old icon.
+
 ## 0.6
 
 - New app icon (Z1a): a white cat sitting in the blue tunnel, reaching up.

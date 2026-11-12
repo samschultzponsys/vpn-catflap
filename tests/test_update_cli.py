@@ -104,3 +104,14 @@ def test_cli_gateway_add_cloud(manager, monkeypatch, capsys):
                     manager=manager) == 0
     g = manager.store.gateway("home2")
     assert g["url"].endswith("/consoles/AA:11") and manager.secrets.get("gateway/home2/api_key") == "K"
+
+
+def test_installed_version_reads_json():
+    import subprocess
+    ok = lambda c: subprocess.CompletedProcess(c, 0, stdout='{"version": "1.4"}', stderr="")  # noqa: E731
+    assert update.installed_version(InstallInfo("flatpak"), run=ok) == "1.4"
+    cmds = []
+    update.installed_version(InstallInfo("flatpak"), run=lambda c: cmds.append(c) or ok(c))
+    assert cmds[0][:3] == ["flatpak-spawn", "--latest-version", "catflap"]
+    bad = lambda c: subprocess.CompletedProcess(c, 1, stdout="", stderr="no")  # noqa: E731
+    assert update.installed_version(InstallInfo("flatpak"), run=bad) is None

@@ -9,7 +9,7 @@ itself into the new version; inside the Flatpak this uses the portal's
 from __future__ import annotations
 
 from . import update
-from .ui_common import app_icon, QtCore, QtGui, QtWidgets, Qt, friendly_error, run_blocking
+from .ui_common import app_icon, QtCore, QtGui, QtWidgets, Qt, friendly_error, run_bg, run_blocking
 from .version import __version__
 
 _Dialog = QtWidgets.QDialog if QtWidgets else object
@@ -107,24 +107,80 @@ class UpdateDialog(_Dialog):
         if res.commands:
             self.set_commands(res.commands)
         if res.done:
-            self.status.setText(f"<b>✓ {res.message}</b> Click <b>Restart catflap</b> to start "
-                                "using it. Connected sites stay connected.")
             self.go.setVisible(False)
             self.restart_btn.setVisible(res.restart)
             self.restart_btn.setDefault(True)
+            if res.restart:
+                self.start_countdown(f"✓ {res.message}")
+            else:
+                self.status.setText(f"<b>✓ {res.message}</b>")
         elif res.downloaded:
             self.status.setText(
-                f"<b>Downloaded.</b> One step left: copy the command above into a terminal and "
-                "run it, then click <b>Restart catflap</b>.<br><small>The Flatpak sandbox can't "
-                "install updates by itself. To allow it once, run: <tt>flatpak override --user "
+                "<b>Downloaded.</b> One step left: copy the command above into a terminal and "
+                "run it. catflap notices when it's installed and restarts by itself (or click "
+                "<b>Restart catflap</b>).<br><small>The Flatpak sandbox can't install updates by "
+                "itself. To allow it once, run: <tt>flatpak override --user "
                 f"--talk-name=org.freedesktop.Flatpak {self.st.install.detail or update.FLATPAK_ID}"
                 "</tt></small>")
             self.go.setVisible(False)
             self.restart_btn.setVisible(True)
             self.restart_btn.setDefault(True)
+            self.watch_for_install()
         else:
             self.status.setText(f"<span style='color:#D92D20'>{res.message}</span>")
             self.go.setEnabled(True)
+
+    # -- restart automatically once the new version is installed
+    WATCH_MS = 4000
+    COUNTDOWN = 3
+
+    def watch_for_install(self) -> None:
+        """Check every few seconds whether the new version is installed (the user runs the
+        install command in a terminal), then restart into it."""
+        self._watch = QtCore.QTimer(self)
+        self._watch.timeout.connect(self._check_installed)
+        self._watch.start(self.WATCH_MS)
+        self._checking = False
+
+    def _check_installed(self) -> None:
+        if self._checking or self.restart_requested:
+            return
+        self._checking = True
+        target, info = self.st.latest.version, self.st.install
+        run_bg(lambda: update.installed_version(info), lambda v, e: self._checked(v, target))
+
+    def _checked(self, version, target) -> None:
+        self._checking = False
+        from .version import is_newer
+        if version and not is_newer(target, version):
+            self._watch.stop()
+            self.start_countdown(f"✓ catflap {version} is installed.")
+
+    def start_countdown(self, done_text: str) -> None:
+        self._left = self.COUNTDOWN
+        self._done_text = done_text
+        self.later.setText("Don't restart now")
+        self._tick_timer = QtCore.QTimer(self)
+        self._tick_timer.timeout.connect(self._tick)
+        self._tick_timer.start(1000)
+        self._tick()
+
+    def _tick(self) -> None:
+        if self._left <= 0:
+            self._tick_timer.stop()
+            self.do_restart()
+            return
+        self.status.setText(f"<b>{self._done_text}</b> Restarting catflap in {self._left}… "
+                            "Connected sites stay connected.")
+        self._left -= 1
+
+    def done(self, result: int) -> None:  # noqa: D401 - Qt API
+        """Stop the install watch and countdown whenever the window closes."""
+        for name in ("_watch", "_tick_timer"):
+            t = getattr(self, name, None)
+            if t is not None:
+                t.stop()
+        super().done(result)
 
     def do_restart(self) -> None:
         # Remember what we expect to come back as, so the new instance can confirm it.
