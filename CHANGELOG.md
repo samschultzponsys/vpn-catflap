@@ -3,6 +3,15 @@
 Versions are `MAJOR.MINOR`; the minor number runs 0–9 and then rolls over
 (1.9 → 2.0). Every release is tagged `vMAJOR.MINOR`.
 
+## 1.1
+
+- Tray icon: turns into the solid blue app icon with a green dot when connected (the
+  dot shows the count when several sites are up); red dot after a failure.
+- Tray menu: short statuses ("Connected (workaround)", "You're here"…); the window
+  keeps the full text.
+- Icon name now changes with every release, so the app menu can't end up with a
+  missing (?) or old icon after an update.
+
 ## 1.0
 
 - The app is called **CatFlap** everywhere you see it: menu, taskbar, window titles,

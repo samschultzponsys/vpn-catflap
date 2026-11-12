@@ -543,13 +543,15 @@ button. With no sites yet, it shows a big **Add your first site** button.
 
 - **The icon:** the app's cat, sitting in its tunnel and reaching up.
   - **Grey outline:** nothing connected.
-  - **Cat and tunnel in the site's color:** connected.
-  - **Striped cat:** several sites connected, one stripe per site's color.
-  - **Red dot:** the last connection attempt failed.
+  - **Solid blue icon with a green dot:** connected. With several sites
+    connected, the dot shows how many.
+  - **Grey outline with a red dot:** the last connection attempt failed.
+  - Each site's own color shows on its card and in the tray menu.
 - **Clicking it:**
   - **Left-click** shows or hides the window.
   - **Right-click** lists your sites with their status. Click one to connect or
-    disconnect it. The menu also has **Add a site…**, **Open CatFlap** and
+    disconnect it; each shows a short status (*Connected*, *Not connected*,
+    *You're here*…). The menu also has **Add a site…**, **Open CatFlap** and
     **Quit**.
 - **Notifications** on connect, disconnect and failure, with the reason in plain words.
 
@@ -622,7 +624,7 @@ Each item maps to a numbered problem in [docs/TEST-CHECKLIST.md](docs/TEST-CHECK
 | 5 | Gateway's ULA IPv6 | IPv6 addresses and routes dropped; `ipv6.method disabled` |
 | 6 | Idle tunnel drops behind NAT | `PersistentKeepalive = 25` |
 | 7 | Autoconnect at login | `connection.autoconnect no` |
-| 8 | Subnet overlaps (local LAN, other tunnels, duplicate VPN subnets) | Same addresses where you are as at the site: connects anyway, routing around your own address and local router. Clashes with another active tunnel are blocked. Warnings; `suggest-subnet` |
+| 8 | Subnet overlaps (local LAN, other tunnels, duplicate VPN subnets). Several sites can be connected at once as long as their networks don't overlap | Same addresses where you are as at the site: connects anyway, routing around your own address and local router. Clashes with another active tunnel are blocked. Warnings; `suggest-subnet` |
 | 9 | Dynamic WAN IP | Uses DDNS hostname when available; warns on raw IP or stale DDNS |
 | 10 | CGNAT | Compares gateway WAN IP to 100.64.0.0/10 and private ranges; warns or blocks |
 | 11 | Shared `.conf` between devices | Keys generated per device on the device; duplicate keys refused; per-device revoke |

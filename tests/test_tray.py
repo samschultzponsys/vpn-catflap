@@ -37,11 +37,16 @@ def wait_for(qapp, cond, timeout=5.0):
 
 
 def test_icon_states(qapp):
-    off = make_icon([]).pixmap(32, 32).toImage()
-    on = make_icon(["#ff0000"]).pixmap(32, 32).toImage()
+    off = make_icon([]).pixmap(64, 64).toImage()
+    on = make_icon(["#ff0000"]).pixmap(64, 64).toImage()
     assert off != on
-    centre = on.pixelColor(16, 22)
-    assert centre.red() > 200 and centre.green() < 60      # cat filled with the site color
+    tile = on.pixelColor(4, 32)                      # solid blue tile when connected
+    assert tile.blue() > 150 and tile.red() < 100
+    dot = on.pixelColor(51, 51)                      # green status dot
+    assert dot.green() > 150 and dot.red() < 100
+    assert off.pixelColor(4, 32).alpha() == 0       # disconnected: just the outline
+    err = make_icon([], error=True).pixmap(64, 64).toImage().pixelColor(51, 51)
+    assert err.red() > 180 and err.green() < 100
 
 
 def test_tray_menu_and_basic_window(qapp, manager, backend):
@@ -324,3 +329,14 @@ def test_color_picker(qapp, monkeypatch):
     assert cp.color() == "#123456"
     cp.set_color(PALETTE[5])
     assert cp.color() == PALETTE[5]
+
+
+def test_tray_menu_status_is_short():
+    from catflap.platform.base import TunnelStatus
+    from catflap.ui_common import INFO, short_status
+    up = TunnelStatus(active=True)
+    assert short_status(up, INFO + "Your current network uses the same addresses as X; …") == "Connected (workaround)"
+    assert short_status(up, None) == "Connected"
+    assert short_status(None, INFO + "You're at X right now …") == "You're here"
+    assert short_status(None, "Site network … a very long error message …") == "Couldn't connect"
+    assert short_status(None, None) == "Not connected"

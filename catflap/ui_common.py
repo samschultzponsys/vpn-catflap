@@ -80,41 +80,56 @@ def _arch_path(s: float) -> "QtGui.QPainterPath":
 def make_pixmap(colors: list[str], error: bool = False, size: int = 64) -> "QtGui.QPixmap":
     """The tray icon: the cat sitting in its tunnel, reaching up.
 
-    Disconnected: grey arch, cat drawn as an outline only. Connected: arch and
-    cat in the connection color (cat striped when several sites are up).
-    Error: red badge in the corner.
+    Disconnected: grey outline. Connected: the solid blue app icon (blue tile,
+    white tunnel and cat) with a green dot; the dot shows how many sites are
+    connected when there's more than one. Failed: grey outline with a red dot.
+    ``colors`` holds one entry per connected site.
     """
     pm = QtGui.QPixmap(size, size)
     pm.fill(Qt.transparent)
     p = QtGui.QPainter(pm)
     p.setRenderHint(QtGui.QPainter.Antialiasing)
     s = size / 64.0
-    # Arch in the connection color so it reads on light and dark panels.
-    arch = QtGui.QColor(GREY if not colors else colors[0] if len(colors) == 1 else "#64748B")
     cat = _cat_path(s)
     if colors:
-        p.save()
-        p.setClipPath(cat)
-        bounds = cat.boundingRect()
-        n = len(colors)
-        for i, c in enumerate(colors):
-            seg = QtCore.QRectF(bounds.x() + bounds.width() * i / n, bounds.y(),
-                                bounds.width() / n + 1, bounds.height())
-            p.fillRect(seg, QtGui.QColor(c))
-        p.restore()
+        tile = QtGui.QLinearGradient(0, 0, size, size)
+        tile.setColorAt(0, QtGui.QColor("#3B82F6"))
+        tile.setColorAt(1, QtGui.QColor("#1E3A8A"))
+        p.setPen(Qt.NoPen)
+        p.setBrush(QtGui.QBrush(tile))
+        p.drawRoundedRect(QtCore.QRectF(2 * s, 2 * s, 60 * s, 60 * s), 14 * s, 14 * s)
+        p.setPen(QtGui.QPen(QtGui.QColor("#BFDBFE"), 4.5 * s, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        p.setBrush(Qt.NoBrush)
+        p.drawPath(_arch_path(s))
+        p.setPen(Qt.NoPen)
+        p.setBrush(QtGui.QColor("#F8FAFC"))
+        p.drawPath(cat)
+        _badge(p, s, "#22C55E", str(len(colors)) if len(colors) > 1 else "")
     else:
         p.setPen(QtGui.QPen(QtGui.QColor(GREY), 3 * s, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
         p.setBrush(Qt.NoBrush)
         p.drawPath(cat)
-    p.setPen(QtGui.QPen(arch, 5 * s, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
-    p.setBrush(Qt.NoBrush)
-    p.drawPath(_arch_path(s))
-    if error:
-        p.setPen(QtGui.QPen(QtGui.QColor("white"), 2 * s))
-        p.setBrush(QtGui.QColor(RED))
-        p.drawEllipse(QtCore.QRectF(41 * s, 41 * s, 21 * s, 21 * s))
+        p.setPen(QtGui.QPen(QtGui.QColor(GREY), 5 * s, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        p.drawPath(_arch_path(s))
+        if error:
+            _badge(p, s, RED, "")
     p.end()
     return pm
+
+
+def _badge(p: "QtGui.QPainter", s: float, color: str, text: str) -> None:
+    """Status dot in the bottom-right corner, with an optional number."""
+    r = QtCore.QRectF(39 * s, 39 * s, 24 * s, 24 * s)
+    p.setPen(QtGui.QPen(QtGui.QColor("white"), 2.5 * s))
+    p.setBrush(QtGui.QColor(color))
+    p.drawEllipse(r)
+    if text:
+        f = p.font()
+        f.setBold(True)
+        f.setPixelSize(max(6, int(15 * s)))
+        p.setFont(f)
+        p.setPen(QtGui.QColor("white"))
+        p.drawText(r, Qt.AlignCenter, text)
 
 
 ICON_FILE = __import__("pathlib").Path(__file__).with_name("resources") / "catflap.svg"
@@ -257,6 +272,20 @@ def status_text(st: Any, err: str | None, busy: bool = False) -> tuple[str, str]
     if err:
         return f"Couldn't connect: {err.splitlines()[0]}", RED
     return "Not connected", GREY
+
+
+def short_status(st: Any, err: str | None, busy: bool = False) -> str:
+    """A few words for the tray menu; the window shows the full text."""
+    note = err[len(INFO):] if err and err.startswith(INFO) else None
+    if busy:
+        return "Working…"
+    if st is not None and getattr(st, "active", False):
+        return "Connected (workaround)" if note and "same addresses" in note else "Connected"
+    if note and "You're at" in note:
+        return "You're here"
+    if err and not note:
+        return "Couldn't connect"
+    return "Not connected"
 
 
 # ============================================================ color picker

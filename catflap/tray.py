@@ -28,7 +28,7 @@ from . import autostart, checks, update
 from .core import Manager
 from .drivers import DRIVERS
 from .model import Profile
-from .ui_common import (GREY, INFO, ColorDialog, app_icon, QtCore, QtGui, QtWidgets, dot_icon, friendly_error, make_icon, require_qt, run_bg, run_blocking, status_text)
+from .ui_common import (GREY, INFO, ColorDialog, app_icon, short_status, QtCore, QtGui, QtWidgets, dot_icon, friendly_error, make_icon, require_qt, run_bg, run_blocking)
 from .version import __version__
 
 __all__ = ["MainWindow", "TrayApp", "make_icon", "main"]
@@ -425,9 +425,7 @@ class TrayApp(QtCore.QObject if QtCore else object):
             for p in sorted(groups[g], key=lambda x: x.display.lower()):
                 st = self.status.get(p.name)
                 active = bool(st and st.active)
-                text = status_text(st, self.errors.get(p.name), p.name in self.busy)[0]
-                if len(text) > 70:
-                    text = text[:68] + "…"
+                text = short_status(st, self.errors.get(p.name), p.name in self.busy)
                 verb = "Disconnect" if active else "Connect"
                 a = m.addAction(dot_icon(p.color or GREY, active), f"{p.display}: {text}  ({verb})")
                 a.setEnabled(p.name not in self.busy)
