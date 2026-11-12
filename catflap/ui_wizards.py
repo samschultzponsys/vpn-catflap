@@ -27,7 +27,7 @@ from .core import Manager
 from .drivers import get_driver_class
 from .drivers.base import GatewayConfig
 from .http import fetch_fingerprint
-from .ui_common import (app_icon, PALETTE, QtWidgets, Qt, friendly_error,
+from .ui_common import (app_icon, ColorPicker, QtWidgets, Qt, friendly_error,
                         run_bg, run_blocking)
 
 _Wizard = QtWidgets.QWizard if QtWidgets else object
@@ -83,40 +83,29 @@ address on that network.</p>
 """
 
 UNIFI_SERVER_HELP = """
-<b>Your UniFi console doesn't have a WireGuard VPN server yet.</b> Create one (one time).
-UniFi asks you to add a client at the same time: make that client <b>this computer</b>.
+<b>Create a WireGuard VPN server on the console</b> (one time):
 <ol>
-<li>Open your console on <a href="https://unifi.ui.com">unifi.ui.com</a> → <b>Network</b> →
-    <b>Settings → VPN → VPN Server</b> → <b>Create New</b>.</li>
-<li>Fill it in (labels can differ slightly between Network versions):
-  <ul>
-  <li><b>VPN Type:</b> WireGuard</li>
-  <li><b>Name:</b> anything, e.g. <i>Remote access</i></li>
-  <li><b>Port:</b> keep <b>51820</b></li>
-  <li><b>Gateway / Subnet</b> (the VPN's own address range): a range used for nothing else
-      and different at every site, e.g. <b>10.250.1.1/24</b> here and 10.250.2.1/24 at the
-      next site. Avoid 192.168.x.x: homes and hotels use those.</li>
-  <li><b>DNS:</b> leave as it is (catflap keeps your own DNS anyway).</li>
-  </ul></li>
-<li><b>Clients → Add Client:</b> name it after <b>this computer</b> (e.g.
-    <i>sam-laptop</i>; one client per computer) and keep the suggested IP address.</li>
-<li><b>Download</b> that client's configuration file. Keep it: if catflap asks for a
-    file in the next step, this is the one.</li>
-<li>Click <b>Create</b> / <b>Apply Changes</b>. Easy to miss: without it the VPN never
-    works.</li>
-<li>Come back here and click <b>Check again</b>.</li>
+<li><a href="https://unifi.ui.com">unifi.ui.com</a> → your console → <b>Network → Settings → VPN →
+    VPN Server → Create New → WireGuard</b>. Keep port <b>51820</b>. For the subnet use a
+    range used nowhere else, e.g. <b>10.250.1.1/24</b> (10.250.2.1/24 at your next site).</li>
+<li>UniFi asks for a client: name it after <b>this computer</b>, then click <b>download</b>
+    (top of the client window, next to the QR code) <b>before Save</b>. That file is what
+    catflap needs.</li>
+<li><b>Save</b>, then <b>Apply Changes</b>, then click <b>Check again</b> here.</li>
 </ol>
+<small>Leave the rest as it is. Don't press ↻ next to the Public Key after downloading:
+it makes the file stop working.</small>
 """
 
 FILE_HELP = {
-    "unifi": """<p><b>Get this computer's WireGuard file from UniFi:</b></p><ol>
-<li>Open your console on <a href="https://unifi.ui.com">unifi.ui.com</a> → <b>Network</b> →
-    <b>Settings → VPN → VPN Server</b> and open your <b>WireGuard</b> server.</li>
-<li>If you created the server a moment ago with a client for this computer, use the file
-    you downloaded then.</li>
-<li>Otherwise, under <b>Clients</b> click <b>Add Client</b>, name it after this computer
-    (e.g. <i>sam-laptop</i>; one client per computer), keep the suggested IP address,
-    <b>Download</b> its configuration file, and click <b>Apply Changes</b>.</li></ol>""",
+    "unifi": """<p><b>Get this computer's WireGuard file from UniFi:</b>
+<a href="https://unifi.ui.com">unifi.ui.com</a> → your console → <b>Network → Settings → VPN →
+VPN Server</b> → your WireGuard server.</p><ul>
+<li>Just created the server with a client for this computer? Use the file you downloaded.</li>
+<li>Otherwise: <b>Add Client</b>, name it after this computer, click <b>download</b> at the top
+    of the client window <b>before Save</b>, then <b>Save</b> and <b>Apply Changes</b>.</li></ul>
+<p><small>One client per computer. Leave Pre-Shared Key and Networks Behind Client off, and
+don't press ↻ next to the Public Key after downloading.</small></p>""",
     "alta": """<p><b>Get a WireGuard file from Alta Labs</b> (Route10, Control 1.0q or later):</p><ol>
 <li>Sign in at <a href="https://manage.alta.inc">manage.alta.inc</a> and open your site.</li>
 <li>Select your <b>Route10</b> and open its <b>VPN</b> tab.</li>
@@ -254,7 +243,7 @@ class FirstRunWizard(_Wizard):
         dl = QtWidgets.QVBoxLayout(done)
         dl.addWidget(_title("<p>catflap lives in your <b>system tray</b> (near the clock). The "
                             "cat icon is grey when nothing is connected and turns your site's "
-                            "colour when you're connected.</p><p>Next, let's add the first place "
+                            "color when you're connected.</p><p>Next, let's add the first place "
                             "you want to reach.</p>"))
         self.add_now = QtWidgets.QCheckBox("Add my first site now")
         self.add_now.setChecked(True)
@@ -929,27 +918,16 @@ class NamePage(_Page):
     def __init__(self, wiz: "SiteWizard"):
         super().__init__()
         self.wiz = wiz
-        self.setTitle("Name and colour")
-        self.setSubTitle("The colour is used for the tray icon while you're connected to this site.")
+        self.setTitle("Name and color")
+        self.setSubTitle("The color is used for the tray icon while you're connected to this site.")
         lay = QtWidgets.QVBoxLayout(self)
         form = QtWidgets.QFormLayout()
         self.name = QtWidgets.QLineEdit()
         self.name.setPlaceholderText("e.g. Home, Office, Mum's house")
         self.name.textChanged.connect(self.completeChanged)
         form.addRow("Name", self.name)
-        swatches = QtWidgets.QHBoxLayout()
-        self.colors = QtWidgets.QButtonGroup(self)
-        for c in PALETTE:
-            b = QtWidgets.QToolButton()
-            b.setCheckable(True)
-            b.setFixedSize(30, 30)
-            b.setStyleSheet(f"QToolButton {{ background:{c}; border-radius:15px; border:2px solid transparent; }}"
-                            f"QToolButton:checked {{ border:3px solid palette(text); }}")
-            b.setProperty("color", c)
-            self.colors.addButton(b)
-            swatches.addWidget(b)
-        swatches.addStretch(1)
-        form.addRow("Colour", swatches)
+        self.colors = ColorPicker(self)
+        form.addRow("Color", self.colors)
         lay.addLayout(form)
         self.connect_now = QtWidgets.QCheckBox("Connect as soon as it's set up")
         lay.addWidget(self.connect_now)
@@ -959,13 +937,7 @@ class NamePage(_Page):
         if not self.name.text():
             site = getattr(self.wiz, "site", None)
             self.name.setText(site.name if site and site.name.lower() != "default" else "")
-        used = {p.color for p in self.wiz.m.store.profiles().values()}
-        for b in self.colors.buttons():
-            if b.property("color") not in used:
-                b.setChecked(True)
-                break
-        else:
-            self.colors.buttons()[0].setChecked(True)
+        self.colors.first_unused({p.color for p in self.wiz.m.store.profiles().values()})
 
     def isComplete(self) -> bool:  # noqa: N802 (Qt API)
         return bool(self.name.text().strip())
@@ -978,7 +950,7 @@ class NamePage(_Page):
                                           f"'{label}'. Pick another name.")
             return False
         name = m.unique_profile_name(label)
-        color = self.colors.checkedButton().property("color")
+        color = self.colors.color()
         if w.manual_cfg is not None:
             fn = lambda: m.import_peer(w.manual_cfg, name, vendor=w.vendor, routes=w.routes,  # noqa: E731
                                        color=color, label=label)

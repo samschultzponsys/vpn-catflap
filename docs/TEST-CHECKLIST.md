@@ -33,12 +33,12 @@ Copy this list into the release issue and tick it off.
 - [ ] **Split DNS:** `--dns-domain corp.lan` resolves `host.corp.lan` through the tunnel and everything else locally
 - [ ] **Export/import:** export on PC A, import on PC B → gateways, keys and profiles present, `catflap up` works; a wrong passphrase is refused (`test_core::test_export_import_roundtrip`)
 - [ ] **Export `--gateways-only`** then `provision` on PC B creates a separate client
-- [ ] **Tray: icon** grey when disconnected; filled with the site's colour when connected; multi-colour with two sites; red dot after a failure (`test_tray.py`)
+- [ ] **Tray: icon** grey when disconnected; filled with the site's color when connected; multi-color with two sites; red dot after a failure (`test_tray.py`)
 - [ ] **Tray: close button** asks tray/quit; *Remember* sticks; *Reset close-button choice* brings the question back
 - [ ] **Tray: minimize** sends the window to the tray
 - [ ] **Tray: notifications** on connect, disconnect and failure (KDE notification centre)
 - [ ] **Tray: autostart** toggle creates/removes `~/.config/autostart/catflap.desktop`; after login the tray appears minimized
-- [ ] **Tray: per-site colour** via *Colour…* and via `catflap set --color`
+- [ ] **Tray: per-site color** via *Color…* and via `catflap set --color`
 - [ ] **Updates:** `catflap version` shows the install method (rpm, pipx, source…). With a fake older version (`CATFLAP_INSTALL_METHOD=rpm` and an older `__version__`), `catflap update --check` prints the right command (`test_update_cli.py`)
 - [ ] **Versioning:** `scripts/bump_version.py` goes 0.9 → 1.0; a release tag that doesn't match `version.py` fails the release workflow (`test_version.py`)
 - [ ] **Flatpak:** install the bundle (or build locally). `flatpak run --command=catflap io.github.samschultzponsys.CatFlap version` says *installed via: flatpak*. Provision/import, then connect from the tray. `nmcli c show` lists `catflap <name>` with the safe settings (problems #2–#7 checks above). Credentials are in KWallet, under the Secret Service collection

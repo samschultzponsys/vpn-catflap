@@ -15,12 +15,11 @@ from typing import Any, Callable
 from . import bundle, checks, keys, netutil, safety
 from .drivers import DriverError, GatewayConfig, NotSupported, get_driver_class
 from .drivers.base import Driver
-from .model import Network, PeerConfig, Profile, Site
+from .model import PALETTE, Network, PeerConfig, Profile, Site
 from .platform.base import Backend, TunnelStatus, get_backend
 from .secrets import SecretStore, gateway_key, profile_key
 from .store import Store
 
-PALETTE = ["#2E9E44", "#1F77D0", "#C2410C", "#9333EA", "#0E9F9F", "#D97706", "#DB2777", "#4D7C0F"]
 GATEWAY_SECRETS = ("api_key", "password")
 PROFILE_SECRETS = ("private_key", "preshared_key")
 

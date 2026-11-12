@@ -41,7 +41,7 @@ def test_icon_states(qapp):
     on = make_icon(["#ff0000"]).pixmap(32, 32).toImage()
     assert off != on
     centre = on.pixelColor(16, 22)
-    assert centre.red() > 200 and centre.green() < 60      # cat filled with the site colour
+    assert centre.red() > 200 and centre.green() < 60      # cat filled with the site color
 
 
 def test_tray_menu_and_basic_window(qapp, manager, backend):
@@ -309,3 +309,18 @@ def test_site_wizard_unifi_cloud_refused_falls_back_to_file(qapp, manager, no_po
     assert w.currentId() == ui_wizards.P_DONE, no_popups
     p = w.result.profile
     assert p.vendor == "unifi" and p.routes == ["192.168.1.0/24"] and p.peer_public_key
+
+
+def test_color_picker(qapp, monkeypatch):
+    from catflap.model import PALETTE
+    from catflap.ui_common import ColorPicker
+    from PySide6 import QtGui
+    cp = ColorPicker()
+    assert len(cp.group.buttons()) == len(PALETTE) == 24
+    cp.first_unused({PALETTE[0], PALETTE[1]})
+    assert cp.color() == PALETTE[2]
+    monkeypatch.setattr(QtWidgets.QColorDialog, "getColor", lambda *a, **k: QtGui.QColor("#123456"))
+    cp._pick_custom()
+    assert cp.color() == "#123456"
+    cp.set_color(PALETTE[5])
+    assert cp.color() == PALETTE[5]

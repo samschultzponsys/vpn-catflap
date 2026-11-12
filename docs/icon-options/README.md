@@ -11,7 +11,7 @@ in code (`make_pixmap` in `catflap/ui_common.py`) from the same cat outline
 | A | `a-peek.svg` | A cat peeking through a cat flap (current) |
 | B | `b-shield.svg` | The cat flap inside a security shield |
 | C | `c-tunnel.svg` | A cat walking into a tunnel (the VPN tunnel) |
-| D | `d-line.svg` | Flat, single-colour line art of A |
+| D | `d-line.svg` | Flat, single-color line art of A |
 | E | `e-keyhole.svg` | A cat-eared padlock with a keyhole |
 | F | `f-paw.svg` | A paw print on the cat flap |
 | G | `g-night-eyes.svg` | Two glowing cat eyes in a dark cat flap |

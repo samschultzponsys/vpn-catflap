@@ -263,20 +263,18 @@ catflap gateway add home --vendor unifi --cloud --console "Home UDM"
   `catflap gateway add … --url https://<console address>`.
 
 **Before adding a site,** the console needs a WireGuard server. The guide checks
-for this and shows these steps if it's missing (problem #1). In UniFi Network,
-go to **Settings → VPN → VPN Server → Create New** (labels can differ slightly by
-version):
+for this (problem #1) and shows these steps:
 
-| Field | What to put |
-|---|---|
-| VPN Type | WireGuard |
-| Name | Anything, e.g. *Remote access* |
-| Port | 51820 (the default) |
-| Gateway / Subnet | A range used for nothing else, different at every site: `10.250.1.1/24`, then `10.250.2.1/24` at the next site… Avoid 192.168.x.x |
-| DNS | Leave as is; catflap keeps your own DNS anyway |
-| Clients → Add Client (required) | Name it after **this computer** (e.g. *sam-laptop*), one per computer, and keep the suggested IP. **Download** its configuration file; it's the file catflap asks for when going through the cloud |
+1. **Network → Settings → VPN → VPN Server → Create New → WireGuard.** Keep port
+   51820. For the subnet, use a range used nowhere else, different per site:
+   `10.250.1.1/24`, then `10.250.2.1/24`, and so on.
+2. UniFi asks for a client: name it after this computer and click **download** at
+   the top of the client window **before Save**. That's the file catflap needs.
+3. **Save**, then **Apply Changes**.
 
-Then click **Create / Apply Changes**.
+In the client window, leave Pre-Shared Key and Networks Behind Client off. Don't
+press ↻ next to the Public Key after downloading: it makes the file stop
+working.
 
 **What the cloud allows:**
 - UniFi's official API, which is all that unifi.ui.com keys reach, covers sites,
@@ -288,10 +286,9 @@ Then click **Create / Apply Changes**.
 - With that file, catflap still checks the WireGuard server exists, still lists
   your networks to tick, and still applies every safety fix.
 
-**Downloading the file:** use the client file you downloaded when creating the
-server. For another computer, open the console on unifi.ui.com → **Network →
-Settings → VPN → VPN Server**, open the WireGuard server, **Add Client** (named after
-that computer), **Download** its configuration and **Apply Changes**.
+**Downloading the file:** use the client file from when you created the server.
+For another computer: open the WireGuard server, **Add Client**, click **download**
+before **Save**, then **Apply Changes**.
 
 **Fully automatic** creation of clients works with **Directly** (a console key,
 while on the console's network) or a self-hosted controller.
@@ -362,7 +359,7 @@ catflap set home --route 192.168.1.0/24 --route 192.168.20.0/24
 ### Several sites, gateways and vendors at once
 
 Each gateway has its own credentials, and each site profile has its own routes,
-VPN subnet, endpoint, DNS and colour:
+VPN subnet, endpoint, DNS and color:
 
 ```bash
 catflap gateway add home   --vendor unifi --url https://192.168.1.1 --tofu
@@ -509,7 +506,7 @@ menu. The guide asks one thing at a time:
 5. **What do you want to reach?** (Omada / Alta / other) Networks from the file
    are pre-ticked. Add others as e.g. `192.168.1.0/24`; the page says where to
    find them for that brand.
-6. **Name and colour:** e.g. "Home", "Mum's house". The colour is used by the tray
+6. **Name and color:** e.g. "Home", "Mum's house". The color is used by the tray
    icon while connected. Tick *Connect as soon as it's set up* if you like.
 7. **Done:** a summary of what was set up and how it's kept safe.
 
@@ -518,7 +515,7 @@ router without adding a site yet.
 
 ### Basic view
 
-One card per site: its name, its colour, its state (*Connected*, *Not
+One card per site: its name, its color, its state (*Connected*, *Not
 connected*, or *Couldn't connect: <reason>*), and one **Connect / Disconnect**
 button. With no sites yet, it shows a big **Add your first site** button.
 
@@ -530,7 +527,7 @@ button. With no sites yet, it shows a big **Add your first site** button.
   - **Connect / Disconnect**
   - **Run checks:** pre-flight only.
   - **Edit…:** name, DDNS name, networks, split DNS.
-  - **Colour…**
+  - **Color…**
   - **Re-apply settings**
   - **Remove…:** from this computer only, or also delete this computer's access
     on the router.
@@ -541,8 +538,8 @@ button. With no sites yet, it shows a big **Add your first site** button.
 
 - **The icon:** the app's cat, sitting in its tunnel and reaching up.
   - **Grey outline:** nothing connected.
-  - **Cat and tunnel in the site's colour:** connected.
-  - **Striped cat:** several sites connected, one stripe per site's colour.
+  - **Cat and tunnel in the site's color:** connected.
+  - **Striped cat:** several sites connected, one stripe per site's color.
   - **Red dot:** the last connection attempt failed.
 - **Clicking it:**
   - **Left-click** shows or hides the window.

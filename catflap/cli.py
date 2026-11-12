@@ -461,7 +461,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     def common_new(p):
         p.add_argument("--endpoint", help="public hostname of the site (DDNS) instead of the raw WAN IP")
-        p.add_argument("--color", help="tray colour for this connection, e.g. '#2E9E44'")
+        p.add_argument("--color", help="tray color for this connection, e.g. '#2E9E44'")
         p.add_argument("--replace", action="store_true", help="replace an existing profile/client of the same name")
         p.add_argument("--no-install", action="store_true", help="only store the profile; don't create the OS connection")
         dns_opts(p)
@@ -545,7 +545,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("show", help="show a profile")
     p.add_argument("name")
     p.set_defaults(fn=cmd_show)
-    p = sub.add_parser("set", help="change a profile (endpoint, routes, colour, DNS)")
+    p = sub.add_parser("set", help="change a profile (endpoint, routes, color, DNS)")
     p.add_argument("name")
     p.add_argument("--endpoint")
     p.add_argument("--route", action="append", help="replace the routed CIDRs (repeatable)")

@@ -16,7 +16,7 @@ except ImportError:  # pragma: no cover - depends on the platform packages
 GREY = "#8A8F98"
 RED = "#D92D20"
 GREEN = "#16A34A"
-PALETTE = ["#22C55E", "#3B82F6", "#F97316", "#A855F7", "#14B8A6", "#EAB308", "#EC4899", "#64748B"]
+from .model import PALETTE  # noqa: E402,F401 - re-exported for the UI
 
 
 def require_qt() -> None:
@@ -81,7 +81,7 @@ def make_pixmap(colors: list[str], error: bool = False, size: int = 64) -> "QtGu
     """The tray icon: the cat sitting in its tunnel, reaching up.
 
     Disconnected: grey arch, cat drawn as an outline only. Connected: arch and
-    cat in the connection colour (cat striped when several sites are up).
+    cat in the connection color (cat striped when several sites are up).
     Error: red badge in the corner.
     """
     pm = QtGui.QPixmap(size, size)
@@ -89,7 +89,7 @@ def make_pixmap(colors: list[str], error: bool = False, size: int = 64) -> "QtGu
     p = QtGui.QPainter(pm)
     p.setRenderHint(QtGui.QPainter.Antialiasing)
     s = size / 64.0
-    # Arch in the connection colour so it reads on light and dark panels.
+    # Arch in the connection color so it reads on light and dark panels.
     arch = QtGui.QColor(GREY if not colors else colors[0] if len(colors) == 1 else "#64748B")
     cat = _cat_path(s)
     if colors:
@@ -241,7 +241,7 @@ def friendly_error(e: BaseException, address: str = "") -> str:
 
 
 def status_text(st: Any, err: str | None, busy: bool = False) -> tuple[str, str]:
-    """(text, colour) for a site's state, in plain words."""
+    """(text, color) for a site's state, in plain words."""
     if busy:
         return "Working…", GREY
     if st is not None and getattr(st, "active", False):
@@ -250,3 +250,94 @@ def status_text(st: Any, err: str | None, busy: bool = False) -> tuple[str, str]
         first = err.splitlines()[0]
         return f"Couldn't connect: {first[:90]}", RED
     return "Not connected", GREY
+
+
+# ============================================================ color picker
+_Widget = QtWidgets.QWidget if QtWidgets else object
+
+
+class ColorPicker(_Widget):
+    """Swatches in rows of 12 plus "Custom…" for any other color."""
+
+    PER_ROW = 12
+
+    def __init__(self, parent=None, size: int = 26):
+        super().__init__(parent)
+        self._size = size
+        lay = QtWidgets.QGridLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(6)
+        self.group = QtWidgets.QButtonGroup(self)
+        for i, c in enumerate(PALETTE):
+            lay.addWidget(self._swatch(c), i // self.PER_ROW, i % self.PER_ROW)
+        self.custom = QtWidgets.QPushButton("Custom…")
+        self.custom.clicked.connect(self._pick_custom)
+        rows = (len(PALETTE) + self.PER_ROW - 1) // self.PER_ROW
+        lay.addWidget(self.custom, rows, 0, 1, 4)
+        self._custom_btn = None
+
+    def _swatch(self, c: str) -> "QtWidgets.QToolButton":
+        b = QtWidgets.QToolButton()
+        b.setCheckable(True)
+        b.setFixedSize(self._size, self._size)
+        r = self._size // 2
+        b.setStyleSheet(f"QToolButton {{ background:{c}; border-radius:{r}px; border:2px solid transparent; }}"
+                        f"QToolButton:checked {{ border:3px solid palette(text); }}")
+        b.setProperty("color", c)
+        b.setToolTip(c)
+        self.group.addButton(b)
+        return b
+
+    def color(self) -> str:
+        b = self.group.checkedButton()
+        return b.property("color") if b else PALETTE[0]
+
+    def set_color(self, c: str) -> None:
+        c = (c or "").upper()
+        for b in self.group.buttons():
+            if b.property("color").upper() == c:
+                b.setChecked(True)
+                return
+        if c:
+            self._set_custom(c)
+
+    def first_unused(self, used: set[str]) -> None:
+        used = {u.upper() for u in used if u}
+        for b in self.group.buttons():
+            if b.property("color").upper() not in used:
+                b.setChecked(True)
+                return
+        self.group.buttons()[0].setChecked(True)
+
+    def _set_custom(self, c: str) -> None:
+        if self._custom_btn is None:
+            self._custom_btn = self._swatch(c)
+            rows = (len(PALETTE) + self.PER_ROW - 1) // self.PER_ROW
+            self.layout().addWidget(self._custom_btn, rows, 4)
+        r = self._size // 2
+        self._custom_btn.setProperty("color", c)
+        self._custom_btn.setToolTip(c)
+        self._custom_btn.setStyleSheet(
+            f"QToolButton {{ background:{c}; border-radius:{r}px; border:2px solid transparent; }}"
+            f"QToolButton:checked {{ border:3px solid palette(text); }}")
+        self._custom_btn.setChecked(True)
+
+    def _pick_custom(self) -> None:
+        c = QtWidgets.QColorDialog.getColor(QtGui.QColor(self.color()), self, "Pick a color")
+        if c.isValid():
+            self._set_custom(c.name().upper())
+
+
+class ColorDialog(QtWidgets.QDialog if QtWidgets else object):
+    def __init__(self, parent, title: str, current: str):
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        lay = QtWidgets.QVBoxLayout(self)
+        lay.addWidget(QtWidgets.QLabel("Used for the tray icon while you're connected to this site."))
+        self.picker = ColorPicker(self)
+        self.picker.set_color(current)
+        lay.addWidget(self.picker)
+        bb = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+        bb.accepted.connect(self.accept)
+        bb.rejected.connect(self.reject)
+        lay.addWidget(bb)

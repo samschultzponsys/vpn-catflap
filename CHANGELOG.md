@@ -3,6 +3,14 @@
 Versions are `MAJOR.MINOR`; the minor number runs 0–9 and then rolls over
 (1.9 → 2.0). Every release is tagged `vMAJOR.MINOR`.
 
+## 0.9
+
+- 24 site colors in two rows plus **Custom…** for any other color, in the Add a site
+  guide and the Advanced view's Color… button.
+- American spelling everywhere ("color").
+- Shorter UniFi server steps, with what matters on the client screen: click
+  **download** before **Save**, and don't regenerate the public key afterwards.
+
 ## 0.8
 
 - Icon: the launcher's icon name now changes whenever the artwork changes (Flatpak
@@ -34,7 +42,7 @@ Versions are `MAJOR.MINOR`; the minor number runs 0–9 and then rolls over
 
 - New app icon (Z1a): a white cat sitting in the blue tunnel, reaching up.
 - Tray icon redrawn from the same cat outline: grey outline when disconnected, the
-  site's colour when connected (split for several sites), red dot after a failure.
+  site's color when connected (split for several sites), red dot after a failure.
 
 ## 0.5
 
@@ -55,7 +63,7 @@ Versions are `MAJOR.MINOR`; the minor number runs 0–9 and then rolls over
 
 - New app icon (T1): the first icon's cat sitting in a blue tunnel.
 - Tray icon redrawn to match: grey outline when disconnected, cat and tunnel in
-  the site's colour when connected, red dot after a failure.
+  the site's color when connected, red dot after a failure.
 - Windows, wizards and the update window use the installed app icon, so changing
   `catflap/resources/catflap.svg` changes it everywhere.
 
@@ -75,7 +83,7 @@ Versions are `MAJOR.MINOR`; the minor number runs 0–9 and then rolls over
   of each), then add the first site.
 - **Basic view:** one big card per site with a Connect button; a clear "Add your
   first site" screen when empty.
-- **Advanced view:** sites and gateways tables, a details pane, checks, edit, colour,
+- **Advanced view:** sites and gateways tables, a details pane, checks, edit, color,
   re-apply, remove/revoke, and API-key management.
 - **Add a site** guide: UniFi automatic setup (API key help, connection test, site
   choice, VPN server check with fix-it steps, network picker that flags clashes),
@@ -95,7 +103,7 @@ Versions are `MAJOR.MINOR`; the minor number runs 0–9 and then rolls over
 - NetworkManager backend (Linux) with enforced safe defaults and read-back verification.
 - Windows backend (WireGuard for Windows tunnel service): under development.
 - Pre-flight checks (overlaps, on-site/linked site, CGNAT, DDNS) and post-connect health check.
-- Tray app: per-connection colours, minimize to tray, close-to-tray prompt, notifications,
+- Tray app: per-connection colors, minimize to tray, close-to-tray prompt, notifications,
   autostart.
 - Multiple gateways/instances, each with its own credentials; credentials stored only in
   the local keyring.

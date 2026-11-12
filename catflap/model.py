@@ -12,6 +12,15 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 
+# Site colors (tray icon and window), in rows of 12: bright, then deep shades.
+PALETTE = [
+    "#22C55E", "#10B981", "#14B8A6", "#06B6D4", "#0EA5E9", "#3B82F6",
+    "#6366F1", "#8B5CF6", "#A855F7", "#D946EF", "#EC4899", "#F43F5E",
+    "#EF4444", "#F97316", "#F59E0B", "#EAB308", "#84CC16", "#64748B",
+    "#15803D", "#047857", "#0F766E", "#1D4ED8", "#6D28D9", "#BE185D",
+]
+
+
 @dataclass
 class Site:
     id: str                      # vendor's stable id (UniFi: integration UUID)
@@ -106,7 +115,7 @@ class Profile:
     wan_ip: str | None = None
     warnings: list[str] = field(default_factory=list)
     created: str = ""
-    color: str = ""                  # tray colour for this connection, "#RRGGBB"
+    color: str = ""                  # tray color for this connection, "#RRGGBB"
     label: str = ""                  # friendly display name, e.g. "Ponsys Office"
 
     @property

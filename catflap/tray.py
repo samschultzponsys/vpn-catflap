@@ -10,7 +10,7 @@ Windows uses the notification area.
 * The window minimizes to the tray; closing asks "keep running in the tray or
   quit" (with "remember my choice").
 * Tray icon: the cat is a grey outline when nothing is connected, and turns
-  the site's colour when connected (striped for several sites); red badge after
+  the site's color when connected (striped for several sites); red badge after
   a failure.
 * Notifications, start-at-login, daily update check with install-aware
   update instructions.
@@ -28,7 +28,7 @@ from . import autostart, checks, update
 from .core import Manager
 from .drivers import DRIVERS
 from .model import Profile
-from .ui_common import (GREY, app_icon, QtCore, QtGui, QtWidgets, dot_icon, friendly_error, make_icon, require_qt, run_bg, run_blocking, status_text)
+from .ui_common import (GREY, ColorDialog, app_icon, QtCore, QtGui, QtWidgets, dot_icon, friendly_error, make_icon, require_qt, run_bg, run_blocking, status_text)
 from .version import __version__
 
 __all__ = ["MainWindow", "TrayApp", "make_icon", "main"]
@@ -142,10 +142,9 @@ class MainWindow(QtWidgets.QMainWindow if QtWidgets else object):
                 self.refresh()
             elif act == "color":
                 p = m.store.profile(name)
-                c = QtWidgets.QColorDialog.getColor(QtGui.QColor(p.color or GREY), self,
-                                                    f"Colour for {p.display}")
-                if c.isValid():
-                    m.update_profile(name, color=c.name())
+                dlg = ColorDialog(self, f"Color for {p.display}", p.color or "")
+                if a.run_dialog(dlg):
+                    m.update_profile(name, color=dlg.picker.color())
                     a.poll()
             elif act == "edit":
                 self.edit_site(name)

@@ -196,7 +196,7 @@ class AdvancedView(_Base):
         lay.addWidget(split, 1)
         row = QtWidgets.QHBoxLayout()
         for text, act in (("Connect / Disconnect", "toggle"), ("Run checks", "check"),
-                          ("Edit…", "edit"), ("Colour…", "color"), ("Re-apply settings", "apply"),
+                          ("Edit…", "edit"), ("Color…", "color"), ("Re-apply settings", "apply"),
                           ("Remove…", "remove")):
             b = QtWidgets.QPushButton(text)
             b.clicked.connect(lambda _=False, a=act: self._emit_site(a))
