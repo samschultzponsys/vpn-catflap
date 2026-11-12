@@ -3,6 +3,13 @@
 Versions are `MAJOR.MINOR`; the minor number runs 0–9 and then rolls over
 (1.9 → 2.0). Every release is tagged `vMAJOR.MINOR`.
 
+## 1.0
+
+- The app is called **CatFlap** everywhere you see it: menu, taskbar, window titles,
+  notifications and the setup guides. The command stays `catflap`.
+- README header: icon centered above the title, so the heading line no longer runs
+  through it.
+
 ## 0.9
 
 - 24 site colors in two rows plus **Custom…** for any other color, in the Add a site

@@ -1,4 +1,4 @@
-# catflap architecture
+# CatFlap architecture
 
 ## Language: Python 3.11+
 
@@ -92,7 +92,7 @@ class Driver:
 The integration API (Network 10.1) has no WireGuard port, public key or peer
 management, so the classic API fills the gap. It uses the same API key first, and
 falls back to a local admin login (`/api/auth/login` plus CSRF token). If the server
-config doesn't include the public key, catflap derives it from the server's
+config doesn't include the public key, CatFlap derives it from the server's
 private key in the same response.
 
 ## Platform backends (`catflap/platform/`)
@@ -118,7 +118,7 @@ private key in the same response.
 ## Flatpak
 
 `packaging/flatpak/io.github.samschultzponsys.CatFlap.yml` builds on the KDE 6.11
-runtime with Flathub's `io.qt.PySide.BaseApp`. `trim.sh` removes what catflap
+runtime with Flathub's `io.qt.PySide.BaseApp`. `trim.sh` removes what CatFlap
 doesn't use (LLVM/clang, PyOpenGL, FFmpeg, every Qt binding except
 Core/Gui/Widgets/DBus), taking the app from about 314 MB to 50 MB installed and a
 12 MB bundle. Python dependencies are pinned wheels with checksums, listed in
@@ -127,7 +127,7 @@ permissions and why each is needed are listed in the README.
 
 ## Security model
 
-- catflap runs as the user. Privileged changes go through NetworkManager and polkit
+- CatFlap runs as the user. Privileged changes go through NetworkManager and polkit
   (Linux) or UAC (Windows).
 - Secrets live in the OS keyring. A 0600 file is used only when explicitly requested.
 - Gateway TLS uses a pinned SHA-256 fingerprint (trust on first use, with the
@@ -144,7 +144,7 @@ For CGNAT sites (problem #10), still open:
 
 1. **Relay on your VPS:** the gateway and the laptop both dial out to a WireGuard
    hub on the VPS. This is simple, works everywhere, and all traffic passes through
-   the VPS. catflap could provision the hub as just another "gateway" driver.
+   the VPS. CatFlap could provision the hub as just another "gateway" driver.
 2. **Headscale + Tailscale clients:** real NAT traversal with DERP fallback. This is
    the most Teleport-like option, but it adds a coordination server and a client
    daemon on the gateway, which UniFi, Omada and Alta can't run natively.
@@ -152,7 +152,7 @@ For CGNAT sites (problem #10), still open:
    inbound where available.
 
 The current recommendation is (1), as a future `vps` driver, because it keeps
-catflap's model unchanged.
+CatFlap's model unchanged.
 
 ## Roadmap
 

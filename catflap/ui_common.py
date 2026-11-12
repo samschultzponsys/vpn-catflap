@@ -1,4 +1,4 @@
-"""Shared Qt helpers for the catflap GUI: icons, background work, plain-language errors."""
+"""Shared Qt helpers for the CatFlap GUI: icons, background work, plain-language errors."""
 
 from __future__ import annotations
 
@@ -131,7 +131,7 @@ def app_icon() -> "QtGui.QIcon":
     icon = QtGui.QIcon(str(ICON_FILE))
     if not icon.isNull() and not icon.pixmap(64, 64).isNull():
         return icon
-    for name in (os.environ.get("FLATPAK_ID", ""), "catflap"):
+    for name in (os.environ.get("FLATPAK_ID", ""), "CatFlap"):
         if name and QtGui.QIcon.hasThemeIcon(name):
             return QtGui.QIcon.fromTheme(name)
     return QtGui.QIcon(make_pixmap(["#3B82F6"], size=128))
@@ -200,7 +200,7 @@ def run_blocking(parent, text: str, fn: Callable[[], Any]) -> Any:
     """Run ``fn`` in the background behind a "please wait" dialog; return its
     result or raise its exception. The UI keeps repainting meanwhile."""
     dlg = QtWidgets.QProgressDialog(text, None, 0, 0, parent)
-    dlg.setWindowTitle("catflap")
+    dlg.setWindowTitle("CatFlap")
     dlg.setWindowModality(Qt.WindowModal)
     dlg.setMinimumDuration(300)
     dlg.setCancelButton(None)

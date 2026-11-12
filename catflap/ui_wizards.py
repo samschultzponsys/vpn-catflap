@@ -5,12 +5,12 @@
 * :class:`SiteWizard` - "I want to reach a site", with exact steps per brand:
   - UniFi: automatic, through the UniFi cloud (one account API key from
     unifi.ui.com, pick the console) or directly on the local network;
-  - TP-Link Omada / other routers: catflap creates this computer's keys, you add
+  - TP-Link Omada / other routers: CatFlap creates this computer's keys, you add
     it as a WireGuard peer on the router and type a few values back;
   - Alta Labs / other: pick a WireGuard file downloaded from the router.
 * :class:`GatewayWizard` - add a UniFi console without adding a site yet.
 
-Whatever the route, the result is a WireGuard connection with catflap's safe
+Whatever the route, the result is a WireGuard connection with CatFlap's safe
 defaults. All work goes through :class:`catflap.core.Manager`; network calls run
 in the background behind a "please wait" dialog.
 """
@@ -56,17 +56,17 @@ UNIFI_CLOUD_HELP = """
     <b>The key only works for the group selected here.</b></li>
 <li>Open <b>API Keys</b> in the left menu and click <b>Create New API Key</b>:
   <ul>
-  <li><b>Name:</b> <i>catflap</i></li>
+  <li><b>Name:</b> <i>CatFlap</i></li>
   <li><b>Expiration:</b> the longest you're comfortable with (a year is a good balance).
-      When it expires, catflap tells you; paste a new key in Advanced view → Gateways →
+      When it expires, CatFlap tells you; paste a new key in Advanced view → Gateways →
       Change API key.</li>
-  <li><b>Site Manager:</b> on (lets catflap find your consoles)</li>
+  <li><b>Site Manager:</b> on (lets CatFlap find your consoles)</li>
   <li><b>UniFi Applications:</b> on, with only <b>Network</b> (Protect isn't needed), and
       <b>Sites:</b> the sites you want to reach (or All Sites)</li>
   </ul></li>
 <li><b>Copy</b> the key (it's shown only once) and paste it below.</li>
 </ol>
-<p><small>catflap reaches your consoles through Ubiquiti's cloud, so you don't need to be at
+<p><small>CatFlap reaches your consoles through Ubiquiti's cloud, so you don't need to be at
 the site. The console must show as <b>Online</b> on unifi.ui.com. Consoles in a
 <b>different</b> group need their own key: run <i>Add a site</i> again with that group's key
 (each key is saved separately, only on this computer, in your keyring).<br>
@@ -89,12 +89,12 @@ UNIFI_SERVER_HELP = """
     VPN Server → Create New → WireGuard</b>. Keep port <b>51820</b>. For the subnet use a
     range used nowhere else, e.g. <b>10.250.1.1/24</b> (10.250.2.1/24 at your next site).</li>
 <li>UniFi asks for a client: name it after <b>this computer</b>. You only need its file if
-    catflap asks for one later. To be safe, click <b>download</b> (top of the client window,
+    CatFlap asks for one later. To be safe, click <b>download</b> (top of the client window,
     next to the QR code) <b>before Save</b>; it can't be downloaded again after.</li>
 <li><b>Save</b>, then <b>Apply Changes</b>, then click <b>Check again</b> here.</li>
 </ol>
 <small>Leave the rest as it is. Don't press ↻ next to the Public Key after downloading:
-it makes the file stop working. If catflap sets up its own client for this computer
+it makes the file stop working. If CatFlap sets up its own client for this computer
 (named <i>catflap-…</i>), you can delete this one afterwards.</small>
 """
 
@@ -185,17 +185,17 @@ class FirstRunWizard(_Wizard):
     def __init__(self, parent=None):
         super().__init__(parent)
         from .ui_views import AdvancedView, BasicView, render_preview
-        self.setWindowTitle("Welcome to catflap")
+        self.setWindowTitle("Welcome to CatFlap")
         self.setWizardStyle(QtWidgets.QWizard.ModernStyle)
         self.setPixmap(QtWidgets.QWizard.LogoPixmap, app_icon().pixmap(56, 56))
         self.resize(820, 600)
 
         welcome = QtWidgets.QWizardPage()
-        welcome.setTitle("Welcome to catflap")
+        welcome.setTitle("Welcome to CatFlap")
         welcome.setSubTitle("Safe, one-click access to your home, office and other sites.")
         wl = QtWidgets.QVBoxLayout(welcome)
         wl.addWidget(_title(
-            "<p>catflap connects this computer to the places you manage (your home, your "
+            "<p>CatFlap connects this computer to the places you manage (your home, your "
             "office, a client's site) as if you were there, using the WireGuard VPN built into "
             "your router.</p>"
             "<p>It works with <b>UniFi</b>, <b>TP-Link Omada</b>, <b>Alta Labs</b> and other "
@@ -209,7 +209,7 @@ class FirstRunWizard(_Wizard):
         self.addPage(welcome)
 
         look = QtWidgets.QWizardPage()
-        look.setTitle("How should catflap look?")
+        look.setTitle("How should CatFlap look?")
         look.setSubTitle("You can switch any time from the View menu.")
         ll = QtWidgets.QHBoxLayout(look)
         self.group = QtWidgets.QButtonGroup(self)
@@ -242,7 +242,7 @@ class FirstRunWizard(_Wizard):
         done = QtWidgets.QWizardPage()
         done.setTitle("All set")
         dl = QtWidgets.QVBoxLayout(done)
-        dl.addWidget(_title("<p>catflap lives in your <b>system tray</b> (near the clock). The "
+        dl.addWidget(_title("<p>CatFlap lives in your <b>system tray</b> (near the clock). The "
                             "cat icon is grey when nothing is connected and turns your site's "
                             "color when you're connected.</p><p>Next, let's add the first place "
                             "you want to reach.</p>"))
@@ -340,7 +340,7 @@ class UnifiAccessPage(_Page):
         self.final = final
         self.consoles: list[dict] = []
         self.setTitle("Connect to UniFi")
-        self.setSubTitle("catflap uses your UniFi account to find your console and set up the VPN.")
+        self.setSubTitle("CatFlap uses your UniFi account to find your console and set up the VPN.")
         lay = QtWidgets.QVBoxLayout(self)
         row = QtWidgets.QHBoxLayout()
         self.cloud = QtWidgets.QRadioButton("Through the UniFi cloud (recommended, works from anywhere)")
@@ -578,7 +578,7 @@ class ServerPage(_Page):
                 self.text.setHtml(UNIFI_SERVER_HELP)      # problem #1: create the server first
                 return
             self.text.setHtml(
-                "<p><b>catflap can see your sites and networks, but UniFi's cloud doesn't let it "
+                "<p><b>CatFlap can see your sites and networks, but UniFi's cloud doesn't let it "
                 "set up the VPN client for you.</b></p>"
                 "<p>Through unifi.ui.com, UniFi only offers its official API, which can't read the "
                 "WireGuard server or create clients. That's fine: you'll download this "
@@ -682,14 +682,14 @@ class NetworksPage(_Page):
 
 
 class MethodPage(_Page):
-    """Omada / other: type the details (catflap makes the keys) or pick a WireGuard file."""
+    """Omada / other: type the details (CatFlap makes the keys) or pick a WireGuard file."""
 
     def __init__(self, wiz: "SiteWizard"):
         super().__init__()
         self.wiz = wiz
         self.setTitle("How do you want to add it?")
         lay = QtWidgets.QVBoxLayout(self)
-        self.manual = QtWidgets.QRadioButton("Type the details (catflap creates this computer's keys)")
+        self.manual = QtWidgets.QRadioButton("Type the details (CatFlap creates this computer's keys)")
         self.file = QtWidgets.QRadioButton("Pick a WireGuard file (.conf) from the router")
         for rb, desc in ((self.manual, "You add this computer as a WireGuard peer on the router "
                                        "and copy a few values back here. Step-by-step help on the "
@@ -760,12 +760,12 @@ class FilePage(_Page):
     def validatePage(self) -> bool:  # noqa: N802 (Qt API)
         path = self.path.text().strip()
         if not os.path.isfile(path):
-            QtWidgets.QMessageBox.warning(self, "catflap", "That file doesn't exist.")
+            QtWidgets.QMessageBox.warning(self, "CatFlap", "That file doesn't exist.")
             return False
         try:
             cfg = get_driver_class(self.wiz.vendor)(GatewayConfig(name="", vendor=self.wiz.vendor), {}).parse_config(path)
         except Exception as e:  # noqa: BLE001
-            QtWidgets.QMessageBox.warning(self, "catflap", "That doesn't look like a WireGuard "
+            QtWidgets.QMessageBox.warning(self, "CatFlap", "That doesn't look like a WireGuard "
                                           f"configuration file:\n\n{friendly_error(e)}")
             return False
         self.wiz.conf_path = path
@@ -781,7 +781,7 @@ class FilePage(_Page):
 
 
 class ManualPage(_Page):
-    """Routers without config files: catflap makes the key pair, the user adds the peer."""
+    """Routers without config files: CatFlap makes the key pair, the user adds the peer."""
 
     def __init__(self, wiz: "SiteWizard"):
         super().__init__()
@@ -830,7 +830,7 @@ class ManualPage(_Page):
             cfg = self.wiz.m.manual_peer(self.priv, self.server_key.text(), self.endpoint.text(),
                                          self.port.value(), self.address.text().split("/")[0])
         except Exception as e:  # noqa: BLE001
-            QtWidgets.QMessageBox.warning(self, "catflap", friendly_error(e))
+            QtWidgets.QMessageBox.warning(self, "CatFlap", friendly_error(e))
             return False
         self.wiz.manual_cfg = cfg
         self.wiz.conf_path = None
@@ -893,7 +893,7 @@ class SiteNetworksPage(_Page):
         try:
             cidr = str(ipaddress.ip_network(raw, strict=False))
         except ValueError:
-            QtWidgets.QMessageBox.warning(self, "catflap", f"'{self.new.text()}' isn't a network "
+            QtWidgets.QMessageBox.warning(self, "CatFlap", f"'{self.new.text()}' isn't a network "
                                           "range like 192.168.1.0/24.")
             return
         self._add_item(cidr, checked=True)
@@ -947,7 +947,7 @@ class NamePage(_Page):
         w, m = self.wiz, self.wiz.m
         label = self.name.text().strip()
         if any(p.display.lower() == label.lower() for p in m.store.profiles().values()):
-            QtWidgets.QMessageBox.warning(self, "catflap", f"You already have a site called "
+            QtWidgets.QMessageBox.warning(self, "CatFlap", f"You already have a site called "
                                           f"'{label}'. Pick another name.")
             return False
         name = m.unique_profile_name(label)
@@ -988,12 +988,12 @@ class DonePage(_Page):
         p = self.wiz.result.profile
         self.text.setText(
             f"<p><b>{p.display}</b> is ready.</p>"
-            "<p>catflap set it up safely:</p><ul>"
+            "<p>CatFlap set it up safely:</p><ul>"
             f"<li>only {', '.join(p.routes)} goes through the VPN</li>"
             "<li>your internet and DNS stay as they are</li>"
             "<li>it never connects by itself, and keeps the connection alive while you use it</li>"
             "</ul>"
-            "<p>Connect any time from the catflap window or by clicking the cat in the tray.</p>")
+            "<p>Connect any time from the CatFlap window or by clicking the cat in the tray.</p>")
 
     def nextId(self) -> int:  # noqa: N802 (Qt API)
         return -1
@@ -1050,7 +1050,7 @@ class GatewayWizard(_Wizard):
         intro.setTitle("Add a gateway")
         il = QtWidgets.QVBoxLayout(intro)
         il.addWidget(_title(
-            "<p>Adding a gateway lets catflap set up sites on it automatically. That works with "
+            "<p>Adding a gateway lets CatFlap set up sites on it automatically. That works with "
             "<b>UniFi</b> today, through the UniFi cloud.</p><p>For <b>TP-Link Omada</b>, "
             "<b>Alta Labs</b> and other routers you don't need a gateway: use <b>Add a site</b>, "
             "which walks you through it.</p>"))

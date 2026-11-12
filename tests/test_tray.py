@@ -53,7 +53,7 @@ def test_tray_menu_and_basic_window(qapp, manager, backend):
     app._render()
     labels = [a.text() for a in app.menu.actions()]
     assert "Home Sweet Home: Not connected  (Connect)" in labels
-    assert "Add a site…" in labels and "Open catflap" in labels and "Quit" in labels
+    assert "Add a site…" in labels and "Open CatFlap" in labels and "Quit" in labels
     backend.active.add("home")
     app.status = manager.status()
     app._render()
@@ -241,7 +241,7 @@ def test_after_restart_messages(monkeypatch):
     from catflap import ui_update
     monkeypatch.setattr(ui_update, "__version__", "1.3")
     s = {"last_run_version": "1.2"}
-    assert ui_update.after_restart_message(s)[0] == "catflap updated"
+    assert ui_update.after_restart_message(s)[0] == "CatFlap updated"
     assert s["last_run_version"] == "1.3"
     assert ui_update.after_restart_message(s) is None
     s["pending_update"] = "1.4"
@@ -271,7 +271,7 @@ def test_update_dialog_auto_restart_countdown_can_be_cancelled(qapp, monkeypatch
     d = ui_update.UpdateDialog(st, settings={})
     monkeypatch.setattr(update, "apply_update", lambda s: update.UpdateResult(True, "installed", restart=True))
     d.do_update()
-    assert "Restarting catflap in" in d.status.text()
+    assert "Restarting CatFlap in" in d.status.text()
     d.reject()                                 # "Don't restart now"
     qapp.processEvents()
     assert not d.restart_requested and not d._tick_timer.isActive()

@@ -9,7 +9,7 @@ from pathlib import Path
 
 DESKTOP_ENTRY = """[Desktop Entry]
 Type=Application
-Name=catflap
+Name=CatFlap
 Comment=WireGuard remote access to your sites
 Exec={exec} tray --minimized
 Icon={icon}

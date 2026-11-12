@@ -1,7 +1,7 @@
 """The "update available" window.
 
 Always shows the manual way (full, copyable commands and a link to the
-download page) next to the automatic one. After an update catflap restarts
+download page) next to the automatic one. After an update CatFlap restarts
 itself into the new version; inside the Flatpak this uses the portal's
 "latest version" launch, so the reopened app really is the new one.
 """
@@ -26,7 +26,7 @@ class UpdateDialog(_Dialog):
         self.settings = settings if settings is not None else {}
         self.restart_requested = False
         rel, info = st.latest, st.install
-        self.setWindowTitle("Update catflap")
+        self.setWindowTitle("Update CatFlap")
         self.resize(640, 520)
         lay = QtWidgets.QVBoxLayout(self)
 
@@ -35,7 +35,7 @@ class UpdateDialog(_Dialog):
         pic.setPixmap(app_icon().pixmap(56, 56))
         head.addWidget(pic)
         title = QtWidgets.QLabel(
-            f"<h2 style='margin:0'>catflap {rel.version} is available</h2>"
+            f"<h2 style='margin:0'>CatFlap {rel.version} is available</h2>"
             f"You have {st.current}, installed with {METHOD_NAMES.get(info.method, info.method)}.")
         title.setWordWrap(True)
         head.addWidget(title, 1)
@@ -74,7 +74,7 @@ class UpdateDialog(_Dialog):
         self.later = QtWidgets.QPushButton("Later")
         self.later.clicked.connect(self.reject)
         bb.addWidget(self.later)
-        self.restart_btn = QtWidgets.QPushButton("Restart catflap")
+        self.restart_btn = QtWidgets.QPushButton("Restart CatFlap")
         self.restart_btn.clicked.connect(self.do_restart)
         self.restart_btn.setVisible(False)
         bb.addWidget(self.restart_btn)
@@ -97,7 +97,7 @@ class UpdateDialog(_Dialog):
     def do_update(self) -> None:
         self.go.setEnabled(False)
         try:
-            res = run_blocking(self, f"Downloading catflap {self.st.latest.version}…",
+            res = run_blocking(self, f"Downloading CatFlap {self.st.latest.version}…",
                                lambda: update.apply_update(self.st))
         except Exception as e:  # noqa: BLE001
             self.status.setText(f"<span style='color:#D92D20'>{friendly_error(e)}</span> "
@@ -117,8 +117,8 @@ class UpdateDialog(_Dialog):
         elif res.downloaded:
             self.status.setText(
                 "<b>Downloaded.</b> One step left: copy the command above into a terminal and "
-                "run it. catflap notices when it's installed and restarts by itself (or click "
-                "<b>Restart catflap</b>).<br><small>The Flatpak sandbox can't install updates by "
+                "run it. CatFlap notices when it's installed and restarts by itself (or click "
+                "<b>Restart CatFlap</b>).<br><small>The Flatpak sandbox can't install updates by "
                 "itself. To allow it once, run: <tt>flatpak override --user "
                 f"--talk-name=org.freedesktop.Flatpak {self.st.install.detail or update.FLATPAK_ID}"
                 "</tt></small>")
@@ -154,7 +154,7 @@ class UpdateDialog(_Dialog):
         from .version import is_newer
         if version and not is_newer(target, version):
             self._watch.stop()
-            self.start_countdown(f"✓ catflap {version} is installed.")
+            self.start_countdown(f"✓ CatFlap {version} is installed.")
 
     def start_countdown(self, done_text: str) -> None:
         self._left = self.COUNTDOWN
@@ -170,7 +170,7 @@ class UpdateDialog(_Dialog):
             self._tick_timer.stop()
             self.do_restart()
             return
-        self.status.setText(f"<b>{self._done_text}</b> Restarting catflap in {self._left}… "
+        self.status.setText(f"<b>{self._done_text}</b> Restarting CatFlap in {self._left}… "
                             "Connected sites stay connected.")
         self._left -= 1
 
@@ -197,8 +197,8 @@ def after_restart_message(settings: dict) -> tuple[str, str] | None:
     settings["last_run_version"] = __version__
     if pending and is_newer(pending, __version__):
         return ("Update not installed yet",
-                f"catflap is still version {__version__}; {pending} hasn't been installed. "
+                f"CatFlap is still version {__version__}; {pending} hasn't been installed. "
                 "Use Help → Check for updates… to see the command again.")
     if last and is_newer(__version__, last):
-        return ("catflap updated", f"catflap was updated from {last} to {__version__}.")
+        return ("CatFlap updated", f"CatFlap was updated from {last} to {__version__}.")
     return None

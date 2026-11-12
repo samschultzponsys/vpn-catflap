@@ -1,4 +1,4 @@
-"""catflap window and tray app (Qt / PySide6).
+"""CatFlap window and tray app (Qt / PySide6).
 
 KDE Plasma on Wayland shows QSystemTrayIcon through StatusNotifierItem;
 Windows uses the notification area.
@@ -67,7 +67,7 @@ class MainWindow(QtWidgets.QMainWindow if QtWidgets else object):
         super().__init__()
         from .ui_views import AdvancedView, BasicView
         self.app = app
-        self.setWindowTitle("catflap")
+        self.setWindowTitle("CatFlap")
         self.setWindowIcon(app_icon())
         self.resize(820, 560)
         self.stack = QtWidgets.QStackedWidget()
@@ -103,7 +103,7 @@ class MainWindow(QtWidgets.QMainWindow if QtWidgets else object):
             grp.addAction(a)
             a.triggered.connect(lambda _=False, mo=mode: self.set_mode(mo))
         sm = mb.addMenu("&Settings")
-        self.a_autostart = sm.addAction("Start catflap when I log in")
+        self.a_autostart = sm.addAction("Start CatFlap when I log in")
         self.a_autostart.setCheckable(True)
         self.a_autostart.setChecked(autostart.is_enabled())
         self.a_autostart.toggled.connect(self.set_autostart)
@@ -116,7 +116,7 @@ class MainWindow(QtWidgets.QMainWindow if QtWidgets else object):
         hm = mb.addMenu("&Help")
         hm.addAction("Setup guide…", self.app.first_run)
         hm.addAction("Check for updates…", lambda: self.app.check_updates(interactive=True))
-        hm.addAction("About catflap", self.about)
+        hm.addAction("About CatFlap", self.about)
         self.set_mode(self.app.settings.get("ui_mode", "basic"), save=False)
 
     # -- view
@@ -150,7 +150,7 @@ class MainWindow(QtWidgets.QMainWindow if QtWidgets else object):
                 self.edit_site(name)
             elif act == "apply":
                 run_blocking(self, "Re-applying safe settings…", lambda: m.apply(name))
-                QtWidgets.QMessageBox.information(self, "catflap", "Settings re-applied.")
+                QtWidgets.QMessageBox.information(self, "CatFlap", "Settings re-applied.")
             elif act == "remove":
                 self.remove_site(name)
             elif act == "gw-key":
@@ -159,7 +159,7 @@ class MainWindow(QtWidgets.QMainWindow if QtWidgets else object):
                                                          QtWidgets.QLineEdit.Password)
                 if ok and key.strip():
                     m.set_gateway_secret(name, "api_key", key.strip())
-                    QtWidgets.QMessageBox.information(self, "catflap", "API key updated.")
+                    QtWidgets.QMessageBox.information(self, "CatFlap", "API key updated.")
             elif act == "gw-remove":
                 if QtWidgets.QMessageBox.question(
                         self, "Remove gateway", f"Remove gateway '{name}' and its saved API key "
@@ -167,7 +167,7 @@ class MainWindow(QtWidgets.QMainWindow if QtWidgets else object):
                     m.remove_gateway(name)
                     a.poll()
         except Exception as e:  # noqa: BLE001
-            QtWidgets.QMessageBox.warning(self, "catflap", friendly_error(e))
+            QtWidgets.QMessageBox.warning(self, "CatFlap", friendly_error(e))
 
     def edit_site(self, name: str) -> None:
         m = self.app.m
@@ -192,7 +192,7 @@ class MainWindow(QtWidgets.QMainWindow if QtWidgets else object):
         try:
             run_blocking(self, "Saving…", lambda: m.update_profile(name, **kw))
         except Exception as e:  # noqa: BLE001
-            QtWidgets.QMessageBox.warning(self, "catflap", friendly_error(e))
+            QtWidgets.QMessageBox.warning(self, "CatFlap", friendly_error(e))
         self.app.poll()
 
     def remove_site(self, name: str) -> None:
@@ -215,7 +215,7 @@ class MainWindow(QtWidgets.QMainWindow if QtWidgets else object):
         try:
             run_blocking(self, "Removing…", lambda: m.remove(name, revoke=do_revoke))
         except Exception as e:  # noqa: BLE001
-            QtWidgets.QMessageBox.warning(self, "catflap", friendly_error(e))
+            QtWidgets.QMessageBox.warning(self, "CatFlap", friendly_error(e))
         self.app.poll()
 
     # -- settings / files
@@ -223,7 +223,7 @@ class MainWindow(QtWidgets.QMainWindow if QtWidgets else object):
         try:
             autostart.set_enabled(v)
         except OSError as e:
-            QtWidgets.QMessageBox.warning(self, "catflap", str(e))
+            QtWidgets.QMessageBox.warning(self, "CatFlap", str(e))
 
     def _ask_pass(self, title: str, confirm: bool) -> str | None:
         pw, ok = QtWidgets.QInputDialog.getText(
@@ -235,7 +235,7 @@ class MainWindow(QtWidgets.QMainWindow if QtWidgets else object):
             again, ok = QtWidgets.QInputDialog.getText(self, title, "Type it again:",
                                                        QtWidgets.QLineEdit.Password)
             if not ok or again != pw:
-                QtWidgets.QMessageBox.warning(self, "catflap", "The passphrases don't match.")
+                QtWidgets.QMessageBox.warning(self, "CatFlap", "The passphrases don't match.")
                 return None
         return pw
 
@@ -247,7 +247,7 @@ class MainWindow(QtWidgets.QMainWindow if QtWidgets else object):
             "Don't use the same site on both computers at the same time; for a second "
             "computer it's best to add the site again there.")
         path, _ = QtWidgets.QFileDialog.getSaveFileName(
-            self, "Export catflap", os.path.expanduser("~/Downloads/catflap-export.json"))
+            self, "Export CatFlap", os.path.expanduser("~/Downloads/catflap-export.json"))
         if not path:
             return
         pw = self._ask_pass("Lock the export", confirm=True)
@@ -258,15 +258,15 @@ class MainWindow(QtWidgets.QMainWindow if QtWidgets else object):
             fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
             with os.fdopen(fd, "w") as f:
                 f.write(text)
-            QtWidgets.QMessageBox.information(self, "catflap", f"Saved to {path}.")
+            QtWidgets.QMessageBox.information(self, "CatFlap", f"Saved to {path}.")
         except Exception as e:  # noqa: BLE001
-            QtWidgets.QMessageBox.warning(self, "catflap", friendly_error(e))
+            QtWidgets.QMessageBox.warning(self, "CatFlap", friendly_error(e))
 
     def import_bundle(self) -> None:
         from .bundle import is_encrypted
         path, _ = QtWidgets.QFileDialog.getOpenFileName(
-            self, "Import catflap export", os.path.expanduser("~/Downloads"),
-            "catflap export (*.json);;All files (*)")
+            self, "Import CatFlap export", os.path.expanduser("~/Downloads"),
+            "CatFlap export (*.json);;All files (*)")
         if not path:
             return
         try:
@@ -274,16 +274,16 @@ class MainWindow(QtWidgets.QMainWindow if QtWidgets else object):
                 text = f.read()
             pw = self._ask_pass("Unlock the export", confirm=False) if is_encrypted(text) else None
             msgs = run_blocking(self, "Importing…", lambda: self.app.m.import_bundle(text, pw))
-            QtWidgets.QMessageBox.information(self, "catflap", "\n".join(msgs))
+            QtWidgets.QMessageBox.information(self, "CatFlap", "\n".join(msgs))
         except Exception as e:  # noqa: BLE001
-            QtWidgets.QMessageBox.warning(self, "catflap", friendly_error(e))
+            QtWidgets.QMessageBox.warning(self, "CatFlap", friendly_error(e))
         self.app.poll()
 
     def about(self) -> None:
         info = update.detect_install()
         QtWidgets.QMessageBox.about(
-            self, "About catflap",
-            f"<b>catflap {__version__}</b><br>Safe WireGuard remote access to your sites.<br><br>"
+            self, "About CatFlap",
+            f"<b>CatFlap {__version__}</b><br>Safe WireGuard remote access to your sites.<br><br>"
             f"Installed via: <b>{info.method}</b> {info.detail}<br>"
             f"Licensed under the Apache License 2.0; see NOTICE.<br>"
             f"<a href='https://github.com/{update.REPO}'>github.com/{update.REPO}</a>")
@@ -296,11 +296,11 @@ class MainWindow(QtWidgets.QMainWindow if QtWidgets else object):
         behavior = self.app.settings.get("close_behavior", "ask")
         if behavior == "ask":
             box = QtWidgets.QMessageBox(self)
-            box.setWindowTitle("Close catflap?")
-            box.setText("Keep catflap running in the system tray, or quit completely?")
+            box.setWindowTitle("Close CatFlap?")
+            box.setText("Keep CatFlap running in the system tray, or quit completely?")
             box.setInformativeText("Connected sites stay connected either way.")
             tray_btn = box.addButton("Keep running in tray", QtWidgets.QMessageBox.AcceptRole)
-            quit_btn = box.addButton("Quit catflap", QtWidgets.QMessageBox.DestructiveRole)
+            quit_btn = box.addButton("Quit CatFlap", QtWidgets.QMessageBox.DestructiveRole)
             box.addButton(QtWidgets.QMessageBox.Cancel)
             remember = QtWidgets.QCheckBox("Remember my choice")
             box.setCheckBox(remember)
@@ -348,7 +348,7 @@ class TrayApp(QtCore.QObject if QtCore else object):
         self.update_status: update.UpdateStatus | None = None
 
         self.tray = QtWidgets.QSystemTrayIcon(make_icon([]), self)
-        self.tray.setToolTip("catflap: not connected")
+        self.tray.setToolTip("CatFlap: not connected")
         self.menu = QtWidgets.QMenu()
         self.tray.setContextMenu(self.menu)
         self.tray.activated.connect(self._activated)
@@ -406,7 +406,7 @@ class TrayApp(QtCore.QObject if QtCore else object):
         colors = [self.profiles[n].color or "#22C55E" for n in sorted(active)]
         self.tray.setIcon(make_icon(colors, error=bool(self.errors) and not active))
         names = [self.profiles[n].display for n in sorted(active)]
-        self.tray.setToolTip("catflap: " + (", ".join(names) + " connected" if names
+        self.tray.setToolTip("CatFlap: " + (", ".join(names) + " connected" if names
                                              else "not connected"))
         self._build_menu()
         if self.window.isVisible():
@@ -435,7 +435,7 @@ class TrayApp(QtCore.QObject if QtCore else object):
         if groups:
             m.addSeparator()
         m.addAction("Add a site…", self.add_site)
-        m.addAction("Open catflap", self.show_window)
+        m.addAction("Open CatFlap", self.show_window)
         if self.update_status and self.update_status.available:
             m.addAction(f"Update to {self.update_status.latest.version}…",
                         lambda: self.check_updates(interactive=True))
@@ -492,7 +492,7 @@ class TrayApp(QtCore.QObject if QtCore else object):
         wiz = GatewayWizard(self.m, self.window)
         if self.run_dialog(wiz) and wiz.gateway:
             QtWidgets.QMessageBox.information(
-                self.window, "catflap", "Gateway added. Use 'Add a site' to choose what to reach.")
+                self.window, "CatFlap", "Gateway added. Use 'Add a site' to choose what to reach.")
 
     def toggle(self, name: str) -> None:
         if name in self.busy:
@@ -512,17 +512,17 @@ class TrayApp(QtCore.QObject if QtCore else object):
         codes = {f.code: f for f in (res.findings if res is not None else [])}
         if err:
             self.errors[name] = friendly_error(err)
-            self.tray.showMessage(f"catflap: {label}", self.errors[name], QtWidgets.QSystemTrayIcon.Critical)
+            self.tray.showMessage(f"CatFlap: {label}", self.errors[name], QtWidgets.QSystemTrayIcon.Critical)
         elif connecting and res is not None and not res.ok and "on-site" in codes:
             self.errors[name] = INFO + codes["on-site"].message
             self.checks[name] = res.findings
-            self.tray.showMessage(f"catflap: {label}", codes["on-site"].message,
+            self.tray.showMessage(f"CatFlap: {label}", codes["on-site"].message,
                                   QtWidgets.QSystemTrayIcon.Information, 6000)
         elif connecting and res is not None and not res.ok:
             bad = [f.message for f in res.findings if f.level == checks.ERROR]
             self.errors[name] = bad[0] if bad else "failed"
             self.checks[name] = res.findings
-            self.tray.showMessage(f"catflap: couldn't connect to {label}", "\n".join(bad)[:400],
+            self.tray.showMessage(f"CatFlap: couldn't connect to {label}", "\n".join(bad)[:400],
                                   QtWidgets.QSystemTrayIcon.Warning)
         else:
             self.errors.pop(name, None)
@@ -530,11 +530,11 @@ class TrayApp(QtCore.QObject if QtCore else object):
                 self.checks[name] = res.findings
             if connecting and "local-overlap" in codes:
                 self.errors[name] = (INFO + "Your current network uses the same addresses as "
-                                     f"{label}; catflap is routing around it.")
-                self.tray.showMessage(f"catflap: {label} connected", codes["local-overlap"].message,
+                                     f"{label}; CatFlap is routing around it.")
+                self.tray.showMessage(f"CatFlap: {label} connected", codes["local-overlap"].message,
                                       QtWidgets.QSystemTrayIcon.Information, 8000)
             else:
-                self.tray.showMessage("catflap", f"{label} {'connected' if connecting else 'disconnected'}",
+                self.tray.showMessage("CatFlap", f"{label} {'connected' if connecting else 'disconnected'}",
                                       QtWidgets.QSystemTrayIcon.Information, 3000)
         self.poll()
 
@@ -550,11 +550,11 @@ class TrayApp(QtCore.QObject if QtCore else object):
             return
         if not st.available:
             if interactive:
-                QtWidgets.QMessageBox.information(self.window, "catflap",
-                                                  st.error or f"catflap {st.current} is up to date.")
+                QtWidgets.QMessageBox.information(self.window, "CatFlap",
+                                                  st.error or f"CatFlap {st.current} is up to date.")
             return
         if not interactive:
-            self.tray.showMessage("catflap update", f"Version {st.latest.version} is available.",
+            self.tray.showMessage("CatFlap update", f"Version {st.latest.version} is available.",
                                   QtWidgets.QSystemTrayIcon.Information)
             return
         from .ui_update import UpdateDialog
@@ -565,8 +565,8 @@ class TrayApp(QtCore.QObject if QtCore else object):
             try:
                 update.restart(st.install)
             except OSError as e:
-                QtWidgets.QMessageBox.warning(self.window, "catflap",
-                                              f"Couldn't restart automatically ({e}). Start catflap "
+                QtWidgets.QMessageBox.warning(self.window, "CatFlap",
+                                              f"Couldn't restart automatically ({e}). Start CatFlap "
                                               "again from your application menu.")
             self.quit()
 
@@ -592,6 +592,7 @@ def main(argv: list[str] | None = None) -> int:
     require_qt()
     argv = sys.argv[1:] if argv is None else argv
     QtWidgets.QApplication.setApplicationName("catflap")
+    QtWidgets.QApplication.setApplicationDisplayName("CatFlap")
     QtWidgets.QApplication.setDesktopFileName(os.environ.get("FLATPAK_ID", "catflap"))
     qapp = QtWidgets.QApplication.instance() or QtWidgets.QApplication([sys.argv[0]])
     qapp.setQuitOnLastWindowClosed(False)

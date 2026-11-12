@@ -1,14 +1,16 @@
-<img src="catflap/resources/catflap.svg" alt="catflap icon" width="96" align="right">
+<p align="center">
+  <img src="catflap/resources/catflap.svg" alt="CatFlap icon" width="128">
+</p>
 
+<h1 align="center">CatFlap</h1>
 
+<p align="center"><b>Safe, one-click WireGuard remote access to your sites, from a tray icon.</b><br>
+UniFi · TP-Link Omada · Alta Labs · any WireGuard router</p>
 
-## VPN CatFlap (`catflap`)
-
-Safe, one-click WireGuard remote access to your sites, from a tray icon. A
-self-hosted, vendor-neutral replacement for UniFi Teleport / WiFiman Desktop
+A self-hosted, vendor-neutral replacement for UniFi Teleport / WiFiman Desktop
 that works on **Linux** (Fedora KDE first, Debian next) and, later, **Windows**.
 
-catflap turns *"I want remote access to site X"* into a split-tunnel WireGuard
+CatFlap turns *"I want remote access to site X"* into a split-tunnel WireGuard
 connection with safe defaults. It works with **UniFi**, **TP-Link Omada**,
 **Alta Labs** and any other WireGuard gateway:
 
@@ -35,7 +37,7 @@ connection with safe defaults. It works with **UniFi**, **TP-Link Omada**,
 5. [How-to guides](#how-to-guides)
 6. [Using the app](#using-the-app)
 7. [Command reference](#command-reference)
-8. [What catflap enforces (and why)](#what-catflap-enforces-and-why)
+8. [What CatFlap enforces (and why)](#what-catflap-enforces-and-why)
 9. [Where things are stored](#where-things-are-stored)
 10. [Updates and versioning](#updates-and-versioning)
 11. [Ansible](#ansible)
@@ -56,7 +58,7 @@ connection with safe defaults. It works with **UniFi**, **TP-Link Omada**,
 | **Generic WireGuard** | – | – | – | ✅ |
 
 \* UniFi's peer endpoints are undocumented and may change between Network
-versions. If they fail, catflap tells you so, and you can download the `.conf`
+versions. If they fail, CatFlap tells you so, and you can download the `.conf`
 from the UniFi UI and use `catflap import` instead. Every safety rule still applies.
 
 | Platform | Backend | Status |
@@ -110,7 +112,7 @@ git clone https://github.com/samschultzponsys/vpn-catflap && cd vpn-catflap
 flatpak-builder --user --install --force-clean build-dir packaging/flatpak/io.github.samschultzponsys.CatFlap.yml
 ```
 
-Start **catflap** from the application menu. On the command line, the CLI is:
+Start **CatFlap** from the application menu. On the command line, the CLI is:
 
 ```bash
 flatpak run --command=catflap io.github.samschultzponsys.CatFlap --help
@@ -169,7 +171,7 @@ git clone https://github.com/samschultzponsys/vpn-catflap && cd vpn-catflap
 pip install -e ".[tray,test]"
 ```
 
-Run catflap as **your normal user**. Never use `sudo`. NetworkManager's polkit
+Run CatFlap as **your normal user**. Never use `sudo`. NetworkManager's polkit
 rules allow desktop users to manage their own connections.
 
 ## Quick start
@@ -201,16 +203,16 @@ catflap import ~/Downloads/office.conf office --vendor unifi \
 catflap up office
 ```
 
-catflap removes `0.0.0.0/0`, `::/0`, `DNS =` and IPv6 from the file, adds
+CatFlap removes `0.0.0.0/0`, `::/0`, `DNS =` and IPv6 from the file, adds
 keepalive, gives the interface a safe name, and tells you what it changed.
 
 ## Setting up each brand
 
-catflap always ends up with a **WireGuard** connection on this computer. The
+CatFlap always ends up with a **WireGuard** connection on this computer. The
 brand decides how it gets there. Every route is also in the app's **Add a site**
 guide, step by step.
 
-| Brand | How catflap reaches it | What you do |
+| Brand | How CatFlap reaches it | What you do |
 |---|---|---|
 | **UniFi** | **UniFi cloud** (unifi.ui.com Site Manager API, through Ubiquiti's cloud connector). Works from anywhere. | Paste one account API key, pick your console |
 | **TP-Link Omada** | No API yet (planned: Omada Open API). | Add this computer as a WireGuard peer, type 4 values back |
@@ -219,7 +221,7 @@ guide, step by step.
 
 ### UniFi (automatic, through the cloud)
 
-catflap doesn't need your router's local address. It talks to the console
+CatFlap doesn't need your router's local address. It talks to the console
 through Ubiquiti's cloud, the same way unifi.ui.com does.
 
 1. Sign in at [unifi.ui.com](https://unifi.ui.com).
@@ -230,15 +232,15 @@ through Ubiquiti's cloud, the same way unifi.ui.com does.
 3. Open **API Keys** in the left menu → **Create New API Key**:
    - **Name:** `catflap`.
    - **Expiration:** the longest you're comfortable with; a year is a good balance.
-     When it expires, catflap says so, and you paste a new key in **Advanced view →
+     When it expires, CatFlap says so, and you paste a new key in **Advanced view →
      Gateways → Change API key**.
    - **Minimum scope:**
-     - **Site Manager:** on. It lets catflap find your consoles.
+     - **Site Manager:** on. It lets CatFlap find your consoles.
      - **UniFi Applications:** on, with only **Network** (Protect isn't needed).
      - **Sites:** the sites you want to reach, or All Sites.
 
    Copy the key; it's shown only once.
-4. In catflap: **Add a site → UniFi → Through the UniFi cloud**, paste the key and
+4. In CatFlap: **Add a site → UniFi → Through the UniFi cloud**, paste the key and
    pick your console from the list.
 
 **Several groups?** Consoles in another group need that group's own key. Run
@@ -269,24 +271,24 @@ for this (problem #1) and shows these steps:
    51820. For the subnet, use a range used nowhere else, different per site:
    `10.250.1.1/24`, then `10.250.2.1/24`, and so on.
 2. UniFi asks for a client: name it after this computer. You only need its file if
-   catflap later asks for one (when it can't create its own client through the cloud).
+   CatFlap later asks for one (when it can't create its own client through the cloud).
    To be safe, click **download** at the top of the client window **before Save**.
    It can't be downloaded after.
 3. **Save**, then **Apply Changes**.
 
 In the client window, leave Pre-Shared Key and Networks Behind Client off. Don't
 press ↻ next to the Public Key after downloading: it makes the file stop
-working. If catflap creates its own client (`catflap-…`), you can delete this
+working. If CatFlap creates its own client (`catflap-…`), you can delete this
 one afterwards.
 
 **What the cloud allows:**
 - UniFi's official API, which is all that unifi.ui.com keys reach, covers sites,
   networks and the list of VPN servers. It **can't** read a WireGuard server's
   details or create VPN clients (checked against Network 10.6).
-- catflap first tries UniFi's internal API through the cloud connector. Keys made
+- CatFlap first tries UniFi's internal API through the cloud connector. Keys made
   with the new **Create New API Key** screen are refused there. In that case the
   guide says so and offers **Continue with a downloaded WireGuard file**.
-- With that file, catflap still checks the WireGuard server exists, still lists
+- With that file, CatFlap still checks the WireGuard server exists, still lists
   your networks to tick, and still applies every safety fix.
 
 **Downloading the file:** use the client file from when you created the server.
@@ -300,7 +302,7 @@ while on the console's network) or a self-hosted controller.
 
 Omada's WireGuard doesn't hand out a configuration file. Instead:
 
-1. **Add a site → TP-Link Omada → Type the details.** catflap creates this
+1. **Add a site → TP-Link Omada → Type the details.** CatFlap creates this
    computer's keys and shows its **public key**.
 2. In your Omada controller (5.9 or later, or Omada Central), open the site →
    **Settings → VPN → WireGuard**:
@@ -309,7 +311,7 @@ Omada's WireGuard doesn't hand out a configuration file. Instead:
      Copy its **Public Key**.
    - **Peers → Create New:** paste this computer's public key, set **Allowed
      Address** to e.g. `10.250.1.2/32`, set **Persistent Keepalive** to 25, and save.
-3. Back in catflap, enter:
+3. Back in CatFlap, enter:
    - the router's public key
    - the site's internet address (your Dynamic DNS name from **Settings → Services →
      Dynamic DNS**, or the WAN IP)
@@ -325,7 +327,7 @@ that needs the Standard tier; Essentials has no Open API.
 
 ### Alta Labs (file)
 
-Alta Labs doesn't publish an API, so catflap uses a file (Route10, Control 1.0q
+Alta Labs doesn't publish an API, so CatFlap uses a file (Route10, Control 1.0q
 or later):
 
 1. Sign in at [manage.alta.inc](https://manage.alta.inc) → your site → your
@@ -333,7 +335,7 @@ or later):
 2. Turn on the **WireGuard server**.
 3. Add a **user profile** for this computer (one per device), then download its
    WireGuard configuration.
-4. In catflap: **Add a site → Alta Labs**, pick the file, and add the networks to
+4. In CatFlap: **Add a site → Alta Labs**, pick the file, and add the networks to
    reach.
 
 ### Other WireGuard routers
@@ -373,7 +375,7 @@ catflap import ~/Downloads/cabin.conf cabin --vendor omada --route 192.168.50.0/
 catflap list        # grouped by gateway and vendor
 ```
 
-catflap warns when two sites' networks or VPN subnets overlap. A good plan
+CatFlap warns when two sites' networks or VPN subnets overlap. A good plan
 is one VPN subnet per site:
 
 ```bash
@@ -382,7 +384,7 @@ catflap suggest-subnet 3     # -> 10.250.3.0/28
 
 ### Use a DDNS hostname instead of the WAN IP
 
-During `provision`, catflap uses the gateway's DDNS hostname if one is set up,
+During `provision`, CatFlap uses the gateway's DDNS hostname if one is set up,
 otherwise its WAN IP. To change it:
 
 ```bash
@@ -396,7 +398,7 @@ catflap set office --dns-domain ponsys.lan --dns-server 10.0.0.1
 catflap set office --no-dns     # remove it again
 ```
 
-Only `*.ponsys.lan` queries go to `10.0.0.1`. catflap never sets a catch-all `~`
+Only `*.ponsys.lan` queries go to `10.0.0.1`. CatFlap never sets a catch-all `~`
 domain, and refuses a DNS server that isn't inside a routed network.
 
 ### Connect, disconnect, status
@@ -408,7 +410,7 @@ catflap status
 catflap down home
 ```
 
-If the health check finds no handshake, catflap disconnects again and tells
+If the health check finds no handshake, CatFlap disconnects again and tells
 you the likely cause. Your normal internet is never affected.
 `--force` skips pre-flight errors; `--keep-on-failure` leaves a failing tunnel up
 for debugging.
@@ -424,7 +426,7 @@ catflap remove home              # local only (e.g. the client was deleted in th
 Every device gets its own client and key (`catflap-<device>-<site>`), so one
 lost laptop can be revoked without touching the others.
 
-### Move catflap to another PC
+### Move CatFlap to another PC
 
 ```bash
 catflap export ~/catflap-backup.json          # asks for a passphrase; AES-256-GCM encrypted
@@ -459,14 +461,14 @@ catflap apply --all
 
 ## Using the app
 
-Start **catflap** from your application menu (or run `catflap-tray`; add
+Start **CatFlap** from your application menu (or run `catflap-tray`; add
 `--minimized` to start hidden in the tray).
 
 ### First start
 
 A short setup guide opens the first time:
 
-1. **Welcome.** What catflap does, in plain words.
+1. **Welcome.** What CatFlap does, in plain words.
 2. **Choose a look,** with a live example of each:
    - **Basic:** one big card per site with a **Connect** button. Best if you
      just want it to work.
@@ -500,7 +502,7 @@ menu. The guide asks one thing at a time:
      in front.
    - **What do you want to reach?** Tick the networks. Networks that clash with
      the one you're on now are marked.
-3. **TP-Link Omada / other: type the details.** catflap shows this computer's
+3. **TP-Link Omada / other: type the details.** CatFlap shows this computer's
    public key and the exact steps to add it as a WireGuard peer on the router.
    You type back four values: the router's public key, the site's internet
    address, the port, and this computer's VPN address.
@@ -547,21 +549,21 @@ button. With no sites yet, it shows a big **Add your first site** button.
 - **Clicking it:**
   - **Left-click** shows or hides the window.
   - **Right-click** lists your sites with their status. Click one to connect or
-    disconnect it. The menu also has **Add a site…**, **Open catflap** and
+    disconnect it. The menu also has **Add a site…**, **Open CatFlap** and
     **Quit**.
 - **Notifications** on connect, disconnect and failure, with the reason in plain words.
 
 ### Window and settings
 
 - **Minimize / close:** minimizing hides the window to the tray. Closing it asks
-  **Keep running in tray** or **Quit catflap**, with *Remember my choice*.
+  **Keep running in tray** or **Quit CatFlap**, with *Remember my choice*.
   **Settings → Ask again what the close button does** brings the question back.
   Connected sites stay connected either way.
-- **Settings:** *Start catflap when I log in* and *Check for updates automatically*.
+- **Settings:** *Start CatFlap when I log in* and *Check for updates automatically*.
 - **File:** *Export everything…* and *Import from another computer…* (locked with
   a passphrase).
 - **Help:** *Setup guide…*, *Check for updates…*, and *About* (version, and **how
-  catflap was installed**).
+  CatFlap was installed**).
 
 The window picks up changes made with the command line within a few seconds.
 
@@ -607,11 +609,11 @@ Environment variables: `CATFLAP_API_KEY`, `CATFLAP_PASSWORD`, `CATFLAP_PASSPHRAS
 `CATFLAP_BACKEND=dbus|nmcli` (choose the NetworkManager backend), `CATFLAP_ALLOW_ROOT=1`
 (allow running as root; not recommended).
 
-## What catflap enforces (and why)
+## What CatFlap enforces (and why)
 
 Each item maps to a numbered problem in [docs/TEST-CHECKLIST.md](docs/TEST-CHECKLIST.md).
 
-| # | Problem | What catflap does |
+| # | Problem | What CatFlap does |
 |---|---|---|
 | 1 | Server never "Created" → no handshake | Checks the server exists and is applied before provisioning; health check after connect; names the cause |
 | 2 | Interface name ≤ 15 chars / no spaces | `cf-<name>` sanitized and de-duplicated; verified after import |
@@ -643,9 +645,9 @@ ever sees the public key.
 
 - Versions are **`MAJOR.MINOR`**. The minor number runs 0–9 and then rolls over:
   `1.1 → 1.2 → … → 1.9 → 2.0`. Every release is tagged `vMAJOR.MINOR`.
-- catflap checks GitHub for a newer release once a day; you can turn this off in the tray settings.
+- CatFlap checks GitHub for a newer release once a day; you can turn this off in the tray settings.
   `catflap update --check` checks on demand.
-- catflap **detects how it was installed** and updates accordingly. The method is
+- CatFlap **detects how it was installed** and updates accordingly. The method is
   shown by `catflap version` and in **Help → About**:
 
 | Installed via | Automatic update | Manual command |
@@ -666,10 +668,10 @@ ever sees the public key.
   download page** buttons
 - one button to update for you
 
-When the update is installed, catflap **restarts by itself** after a short
+When the update is installed, CatFlap **restarts by itself** after a short
 countdown (**Don't restart now** cancels it), or you can click **Restart
-catflap**. It closes the app and opens the new version. Connected sites stay
-connected. After the restart, catflap confirms the version it is now running, or
+CatFlap**. It closes the app and opens the new version. Connected sites stay
+connected. After the restart, CatFlap confirms the version it is now running, or
 tells you if the update wasn't installed yet.
 
 **Flatpak specifics.** A sandboxed app can't install updates on the host by
@@ -680,10 +682,10 @@ itself, so **Download and install** downloads `catflap-<v>.flatpak` to
 flatpak install --user -y ~/Downloads/catflap-<v>.flatpak
 ```
 
-Run it in a terminal. catflap checks every few seconds which version is
+Run it in a terminal. CatFlap checks every few seconds which version is
 installed, and as soon as the install finishes it closes and reopens as the new
 version by itself. The restart uses the Flatpak portal's "latest version"
-launch, so the reopened app really is the new one. To let catflap
+launch, so the reopened app really is the new one. To let CatFlap
 run the install command itself, grant this once (it lets the app run commands
 on the host, so it's off by default):
 
@@ -739,18 +741,18 @@ also set `CATFLAP_SECRETS=file`.
 | Message | Meaning / fix |
 |---|---|
 | *No WireGuard handshake (N bytes sent, 0 received)* | Server not created/applied (#1); UDP port not forwarded / CGNAT (#10); stale endpoint (#9); client revoked or its key used elsewhere (#11) |
-| *The network you're on now uses the same addresses as …* | Not an error: catflap connects with a workaround. Everything at the site is reachable except your own address and your local router's. To avoid it entirely, give the site a less common range (e.g. 10.20.x.0/24) |
+| *The network you're on now uses the same addresses as …* | Not an error: CatFlap connects with a workaround. Everything at the site is reachable except your own address and your local router's. To avoid it entirely, give the site a less common range (e.g. 10.20.x.0/24) |
 | *You're at <site> right now* / *reachable without the tunnel* | You're on site, or linked via Site Magic: no VPN needed |
 | *Polkit denied the change* | Run as your desktop user in an active session, not with sudo or SSH |
 | *the UniFi classic API refused the API key* | Add a local admin with `--username`, or use `catflap import` |
 | *gateway TLS certificate changed* | The console's certificate changed; re-pin with `catflap gateway add … --tofu` |
-| The taskbar or app menu still shows an old catflap icon | Fixed from 0.8: the launcher's icon name changes whenever the artwork does, so KDE's icon cache can't reuse an old one. For older versions: `rm -f ~/.cache/icon-cache.kcache`, then log out and back in |
+| The taskbar or app menu still shows an old CatFlap icon | Fixed from 0.8: the launcher's icon name changes whenever the artwork does, so KDE's icon cache can't reuse an old one. For older versions: `rm -f ~/.cache/icon-cache.kcache`, then log out and back in |
 | *NetworkManager did not keep the safe settings* | An NM plugin or policy overrode them; the connection was removed for safety. Please file a bug |
 
 ## CGNAT sites
 
 Plain WireGuard needs the site to be reachable on a public IP and UDP port.
-If the gateway's WAN IP is in `100.64.0.0/10`, catflap warns about it and blocks
+If the gateway's WAN IP is in `100.64.0.0/10`, CatFlap warns about it and blocks
 connecting. Options being evaluated (see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#nat-traversal-options)):
 a relay on a VPS you control, Headscale/Tailscale-style coordination, or asking
 the ISP for a public IP.
@@ -771,5 +773,5 @@ manual tests on real hardware.
 ## License
 
 Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE). If you
-redistribute catflap or build on it, you must include the NOTICE file
+redistribute CatFlap or build on it, you must include the NOTICE file
 (attribution).
