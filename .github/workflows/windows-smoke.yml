@@ -1,0 +1,19 @@
+# Started by hand only: runs the real-Windows tunnel smoke test on its own
+# (the release workflow runs it too). Short, no artifacts, no caches.
+name: windows-smoke
+on:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python -m pip install -q keyring cryptography
+      - name: Smoke test the tunnel backend on real Windows
+        timeout-minutes: 8
+        run: python packaging/windows/smoke_test.py

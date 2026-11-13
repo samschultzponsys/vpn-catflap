@@ -63,6 +63,17 @@ def run_long(run, cmd):
         return run(cmd)
 
 
+def _with_log(script: str) -> str:
+    """Add a -Log parameter and record the script's output and any error in it."""
+    head, rest = script.lstrip().split("\n", 1) if script.lstrip().startswith("param(") else ("param()", script)
+    params = head[len("param("):-1].strip()
+    head = "param([string]$Log = ''" + (", " + params if params else "") + ")"
+    return (head + "\n"
+            "trap { if ($Log) { ('ERROR: ' + ($_ | Out-String)) | Out-File -LiteralPath $Log -Append -Encoding utf8 }; exit 1 }\n"
+            "& {\n" + rest + "\n} | ForEach-Object { if ($Log) { \"$_\" | Out-File -LiteralPath $Log -Append -Encoding utf8 } }\n"
+            "exit 0\n")
+
+
 class WireGuardMissing(BackendError):
     """No WireGuard engine yet; the app offers to download it."""
 
@@ -141,9 +152,10 @@ if ($Msi -and -not (Test-Path $Wg)) {
   } finally { Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue }
 }
 if (-not (Test-Path $Wg)) { throw "WireGuard engine not found at $Wg" }
-& $Wg /installtunnelservice $Conf
+# via cmd so WireGuard's messages (on stderr) are captured without PowerShell treating them as errors
+$out = cmd.exe /c "`"$Wg`" /installtunnelservice `"$Conf`" 2>&1"
 for ($i = 0; $i -lt 40 -and -not (Get-Service -Name $svc -ErrorAction SilentlyContinue); $i++) { Start-Sleep -Milliseconds 250 }
-if (-not (Get-Service -Name $svc -ErrorAction SilentlyContinue)) { throw "the WireGuard tunnel service was not created" }
+if (-not (Get-Service -Name $svc -ErrorAction SilentlyContinue)) { throw "the WireGuard tunnel service was not created: $out" }
 & sc.exe stop $svc | Out-Null
 & sc.exe config $svc start= demand | Out-Null
 $sd = ((& sc.exe sdshow $svc) -join '').Trim()
@@ -238,27 +250,32 @@ class WindowsBackend(Backend):
         (d / name).write_bytes(data)
 
     def _elevated_script(self, script: str, args: dict[str, str], what: str) -> None:
-        """Run a PowerShell script as administrator (one UAC prompt)."""
+        """Run a PowerShell script as administrator (one UAC prompt). Its window is
+        hidden, so errors and output go to a log file that's shown if it fails."""
         d = Path(tempfile.mkdtemp(prefix="catflap-"))
-        ps1 = d / "step.ps1"
-        ps1.write_text(script, encoding="utf-8")
-        argv = ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(ps1)]
+        ps1, log = d / "step.ps1", d / "step.log"
+        ps1.write_text(_with_log(script), encoding="utf-8")
+        argv = ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(ps1), "-Log", str(log)]
         for k, v in args.items():
             argv += [f"-{k}", v]
         # Start-Process joins the list with spaces and doesn't quote, so quote each one
-        # ourselves (paths like "C:\Program Files\..." have spaces).
+        # ourselves (paths like "C:\\Program Files\\..." have spaces).
         quoted = ",".join("'\"" + a.replace("'", "''") + "\"'" for a in argv)
         launcher = (f"$p = Start-Process -FilePath 'powershell.exe' -ArgumentList {quoted} "
                     "-Verb RunAs -Wait -PassThru -WindowStyle Hidden; exit $p.ExitCode")
         try:
             res = run_long(self.run, ["powershell", "-NoProfile", "-NonInteractive", "-Command", launcher])
+            detail = log.read_text(encoding="utf-8-sig", errors="replace").strip() if log.exists() else ""
         finally:
-            ps1.unlink(missing_ok=True)
+            for f in (ps1, log):
+                f.unlink(missing_ok=True)
             try:
                 d.rmdir()
             except OSError:
                 pass
         if res.returncode != 0:
+            if detail:
+                raise BackendError(f"{what} didn't finish: {detail[-1500:]}")
             raise BackendError(f"{what} didn't finish. Was the Windows permission prompt (UAC) "
                                f"declined? {(res.stderr or res.stdout).strip()}")
 
