@@ -27,7 +27,7 @@ from .core import Manager
 from .drivers import get_driver_class
 from .drivers.base import GatewayConfig
 from .http import fetch_fingerprint
-from .ui_common import (app_icon, ColorPicker, QtWidgets, Qt, friendly_error,
+from .ui_common import (app_icon, ColorPicker, QtWidgets, offer_wireguard_install, Qt, friendly_error,
                         run_bg, run_blocking)
 
 _Wizard = QtWidgets.QWizard if QtWidgets else object
@@ -964,6 +964,8 @@ class NamePage(_Page):
         try:
             w.result = run_blocking(self, f"Setting up {label}…", fn)
         except Exception as e:  # noqa: BLE001
+            if offer_wireguard_install(self, e, m.backend):
+                return self.validatePage()          # WireGuard installed: try again
             QtWidgets.QMessageBox.warning(self, "Setup didn't finish", friendly_error(e))
             return False
         w.connect_after = self.connect_now.isChecked()

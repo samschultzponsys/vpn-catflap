@@ -321,6 +321,26 @@ def short_status(st: Any, err: str | None, busy: bool = False) -> str:
     return "Not connected"
 
 
+def offer_wireguard_install(parent, error: BaseException, backend) -> bool:
+    """If ``error`` means WireGuard for Windows is missing, offer to install it.
+    Returns True when it was installed (the caller should retry)."""
+    if type(error).__name__ != "WireGuardMissing" or not hasattr(backend, "install_wireguard"):
+        return False
+    ans = QtWidgets.QMessageBox.question(
+        parent, "Install WireGuard?",
+        "CatFlap uses WireGuard for Windows for the VPN connection, and it isn't installed.\n\n"
+        "Download the official installer from wireguard.com and run it now? Windows will ask "
+        "for permission once.")
+    if ans != QtWidgets.QMessageBox.Yes:
+        return False
+    try:
+        run_blocking(parent, "Installing WireGuard…", backend.install_wireguard)
+    except Exception as e:  # noqa: BLE001
+        QtWidgets.QMessageBox.warning(parent, "CatFlap", friendly_error(e))
+        return False
+    return True
+
+
 # ============================================================ color picker
 _Widget = QtWidgets.QWidget if QtWidgets else object
 

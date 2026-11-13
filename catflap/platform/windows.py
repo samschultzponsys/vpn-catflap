@@ -30,6 +30,11 @@ from .base import Backend, BackendError, LocalAddress, LocalNetwork, LocalRoute,
 
 DEFAULT_WIREGUARD = r"C:\Program Files\WireGuard\wireguard.exe"
 WIREGUARD_DOWNLOAD = "https://www.wireguard.com/install/"
+WIREGUARD_INSTALLER = "https://download.wireguard.com/windows-client/wireguard-installer.exe"
+
+
+class WireGuardMissing(BackendError):
+    """WireGuard for Windows isn't installed; the app offers to install it."""
 
 
 def _tunnel_dir() -> Path:
@@ -79,10 +84,27 @@ class WindowsBackend(Backend):
     def _ps(self, script: str):
         return self.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script])
 
+    def wireguard_installed(self) -> bool:
+        return Path(self.exe).exists()
+
     def _require_wireguard(self) -> None:
-        if not Path(self.exe).exists():
-            raise BackendError("WireGuard for Windows isn't installed. Install it from "
-                               f"{WIREGUARD_DOWNLOAD} (one time), then try again.")
+        if not self.wireguard_installed():
+            raise WireGuardMissing("WireGuard for Windows isn't installed. CatFlap can install it "
+                                   f"for you, or get it from {WIREGUARD_DOWNLOAD} (one time).")
+
+    def install_wireguard(self) -> None:
+        """Download the official WireGuard installer and run it (it asks for UAC itself)."""
+        import urllib.request
+        d = Path(tempfile.mkdtemp(prefix="catflap-wg-"))
+        exe = d / "wireguard-installer.exe"
+        req = urllib.request.Request(WIREGUARD_INSTALLER, headers={"User-Agent": "catflap"})
+        with urllib.request.urlopen(req, timeout=120) as r, open(exe, "wb") as f:  # noqa: S310
+            f.write(r.read())
+        res = self._ps(f"$p = Start-Process -FilePath '{exe}' -Wait -PassThru; exit $p.ExitCode")
+        if not self.wireguard_installed():
+            raise BackendError("WireGuard didn't finish installing"
+                               + (f" ({(res.stderr or res.stdout).strip()})" if res.returncode else "")
+                               + f". You can install it from {WIREGUARD_DOWNLOAD}.")
 
     def _elevated_script(self, script: str, args: dict[str, str], what: str) -> None:
         """Run a PowerShell script as administrator (one UAC prompt)."""

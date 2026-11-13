@@ -50,18 +50,69 @@ Filename: "{app}\CatFlap.exe"; Description: "Start CatFlap"; Flags: nowait posti
 Filename: "taskkill"; Parameters: "/IM CatFlap.exe /F"; Flags: runhidden; RunOnceId: "StopCatFlap"
 
 [Code]
+const
+  WireGuardInstallerUrl = 'https://download.wireguard.com/windows-client/wireguard-installer.exe';
+
+var
+  DownloadPage: TDownloadWizardPage;
+  NeedWireGuard: Boolean;
+
 function WireGuardInstalled(): Boolean;
 begin
   Result := FileExists(ExpandConstant('{commonpf64}\WireGuard\wireguard.exe')) or
             FileExists(ExpandConstant('{commonpf}\WireGuard\wireguard.exe'));
 end;
 
+procedure InitializeWizard;
+begin
+  NeedWireGuard := not WireGuardInstalled();
+  DownloadPage := CreateDownloadPage('Getting WireGuard',
+    'CatFlap uses WireGuard for Windows for the VPN connection. Downloading the official installer...', nil);
+end;
+
+function UpdateReadyMemo(Space, NewLine, MemoUserInfoInfo, MemoDirInfo, MemoTypeInfo,
+  MemoComponentsInfo, MemoGroupInfo, MemoTasksInfo: String): String;
+begin
+  Result := MemoDirInfo + NewLine + MemoGroupInfo + NewLine + MemoTasksInfo;
+  if NeedWireGuard then
+    Result := Result + NewLine + NewLine + 'WireGuard for Windows is not installed yet:' + NewLine +
+      Space + 'the official installer will be downloaded from download.wireguard.com and started.' + NewLine +
+      Space + 'Windows will ask for permission once (it installs a network driver).';
+end;
+
+function NextButtonClick(CurPageID: Integer): Boolean;
+begin
+  Result := True;
+  if (CurPageID = wpReady) and NeedWireGuard and (not WizardSilent()) then begin
+    DownloadPage.Clear;
+    DownloadPage.Add(WireGuardInstallerUrl, 'wireguard-installer.exe', '');
+    DownloadPage.Show;
+    try
+      try
+        DownloadPage.Download;
+      except
+        SuppressibleMsgBox('Couldn''t download WireGuard (' + GetExceptionMessage + '). CatFlap will ' +
+          'still be installed; install WireGuard later from https://www.wireguard.com/install/ ' +
+          'or from inside CatFlap.', mbError, MB_OK, IDOK);
+        NeedWireGuard := False;
+      end;
+    finally
+      DownloadPage.Hide;
+    end;
+  end;
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   ErrorCode: Integer;
+  Installer: String;
 begin
-  if (CurStep = ssPostInstall) and (not WizardSilent()) and (not WireGuardInstalled()) then
-    if MsgBox('CatFlap uses WireGuard for Windows for the actual VPN connection, and it isn''t ' +
-              'installed yet. Open the WireGuard download page now?', mbConfirmation, MB_YESNO) = IDYES then
-      ShellExec('open', 'https://www.wireguard.com/install/', '', '', SW_SHOWNORMAL, ewNoWait, ErrorCode);
+  if (CurStep = ssPostInstall) and NeedWireGuard and (not WizardSilent()) then begin
+    Installer := ExpandConstant('{tmp}\wireguard-installer.exe');
+    if FileExists(Installer) then
+      { The official installer asks for administrator rights itself (UAC). }
+      if not ShellExec('', Installer, '', '', SW_SHOWNORMAL, ewWaitUntilTerminated, ErrorCode) then
+        MsgBox('WireGuard''s installer didn''t start (' + SysErrorMessage(ErrorCode) + '). You can ' +
+          'install it later from inside CatFlap.', mbError, MB_OK);
+  end;
 end;

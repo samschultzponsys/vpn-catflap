@@ -28,7 +28,7 @@ from . import autostart, checks, update
 from .core import Manager
 from .drivers import DRIVERS
 from .model import Profile
-from .ui_common import (GREY, INFO, ColorDialog, app_icon, short_status, QtCore, QtGui, QtWidgets, dot_icon, friendly_error, make_icon, require_qt, run_bg, run_blocking)
+from .ui_common import (GREY, INFO, ColorDialog, app_icon, offer_wireguard_install, short_status, QtCore, QtGui, QtWidgets, dot_icon, friendly_error, make_icon, require_qt, run_bg, run_blocking)
 from .version import __version__
 
 __all__ = ["MainWindow", "TrayApp", "make_icon", "main"]
@@ -575,6 +575,9 @@ class TrayApp(QtCore.QObject if QtCore else object):
         p = self.profiles.get(name)
         label = p.display if p else name
         codes = {f.code: f for f in (res.findings if res is not None else [])}
+        if err and offer_wireguard_install(self.window, err, self.m.backend):
+            self.toggle(name)                       # WireGuard installed: try again
+            return
         if err:
             self.errors[name] = friendly_error(err)
             self.tray.showMessage(f"CatFlap: {label}", self.errors[name], QtWidgets.QSystemTrayIcon.Critical)

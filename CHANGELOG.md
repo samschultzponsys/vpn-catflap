@@ -3,6 +3,12 @@
 Versions are `MAJOR.MINOR`; the minor number runs 0–9 and then rolls over
 (1.9 → 2.0). Every release is tagged `vMAJOR.MINOR`.
 
+## 1.4
+
+- Windows: the installer downloads and runs the official WireGuard for Windows
+  installer when it's missing, and CatFlap offers the same ("Install WireGuard?")
+  if it's ever missing later. Everything else was already bundled.
+
 ## 1.3
 
 - **Windows (preview):** a `catflap-X.Y-setup.exe` installer on every release (per-user

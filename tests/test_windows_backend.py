@@ -87,3 +87,44 @@ def test_missing_wireguard_is_explained(tmp_path, monkeypatch):
 def test_install_script_grants_the_user_start_and_stop():
     assert "(A;;CCLCRPWPRC;;;$Sid)" in windows._INSTALL_PS
     assert "start= demand" in windows._INSTALL_PS
+
+
+def test_install_wireguard_downloads_official_installer(tmp_path, monkeypatch):
+    exe = tmp_path / "wireguard.exe"
+    monkeypatch.setenv("CATFLAP_WIREGUARD_EXE", str(exe))
+    fetched = []
+
+    class Resp:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self):
+            return b"MZ"
+
+    def fake_urlopen(req, timeout=0):
+        fetched.append(req.full_url)
+        return Resp()
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    w = FakeWindows()
+    real = w.__call__
+
+    def run(cmd):
+        if cmd[0] == "powershell" and "wireguard-installer.exe" in cmd[-1]:
+            exe.write_text("")                       # the installer "installs" WireGuard
+            return CmdResult(0, "", "")
+        return real(cmd)
+    b = windows.WindowsBackend(run)
+    assert not b.wireguard_installed()
+    b.install_wireguard()
+    assert b.wireguard_installed()
+    assert fetched == ["https://download.wireguard.com/windows-client/wireguard-installer.exe"]
+
+
+def test_missing_wireguard_raises_the_offerable_error(tmp_path, monkeypatch):
+    import pytest
+    monkeypatch.setenv("CATFLAP_WIREGUARD_EXE", str(tmp_path / "nope.exe"))
+    with pytest.raises(windows.WireGuardMissing):
+        windows.WindowsBackend(FakeWindows()).install(profile(), cfg())

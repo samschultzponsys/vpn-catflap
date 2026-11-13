@@ -156,11 +156,14 @@ pipx install --system-site-packages https://github.com/samschultzponsys/vpn-catf
 
 ### Windows (preview)
 
-1. Install **WireGuard for Windows** from [wireguard.com/install](https://www.wireguard.com/install/)
-   (one time). CatFlap uses it for the actual VPN connection.
-2. Download `catflap-<version>-setup.exe` from the
+1. Download `catflap-<version>-setup.exe` from the
    [releases page](https://github.com/samschultzponsys/vpn-catflap/releases) and run it.
-   It installs for your user only, so no administrator rights are needed.
+   It installs for your user only, so no administrator rights are needed for CatFlap
+   itself.
+2. If **WireGuard for Windows** isn't installed yet, the installer downloads the
+   official installer from download.wireguard.com and runs it. Windows asks for
+   permission once, because WireGuard installs a network driver. If WireGuard is
+   missing later, CatFlap offers to install it the same way.
 3. Start **CatFlap** from the Start menu.
 
 **On Windows:**

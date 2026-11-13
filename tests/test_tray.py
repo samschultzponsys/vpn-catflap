@@ -352,3 +352,17 @@ def test_tray_menu_status_is_short():
     assert short_status(None, INFO + "You're at X right now …") == "You're here"
     assert short_status(None, "Site network … a very long error message …") == "Couldn't connect"
     assert short_status(None, None) == "Not connected"
+
+
+def test_offer_wireguard_install(qapp, monkeypatch, no_popups):
+    from catflap.platform.windows import WireGuardMissing
+    from catflap.ui_common import offer_wireguard_install
+    installed = []
+
+    class B:
+        def install_wireguard(self):
+            installed.append(True)
+    monkeypatch.setattr(QtWidgets.QMessageBox, "question", lambda *a, **k: QtWidgets.QMessageBox.Yes)
+    assert offer_wireguard_install(None, WireGuardMissing("missing"), B())
+    assert installed == [True]
+    assert not offer_wireguard_install(None, RuntimeError("other"), B())     # other errors: no offer
