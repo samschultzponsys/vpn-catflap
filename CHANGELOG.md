@@ -26,6 +26,8 @@ Versions are `MAJOR.MINOR`; the minor number runs 0–9 and then rolls over
   tunnels and engine (`catflap-cli remove-tunnels`).
 - Windows fixes: the permission-prompt step no longer gives up after 30 seconds, and
   paths with spaces (like `C:\Program Files`) are passed to it correctly.
+  If that step fails, the message now says why, and it works when PowerShell 7 is
+  also installed.
 - Releases are now checked on a real Windows machine (GitHub's Windows runner): download,
   set up, connect, disconnect and remove a test tunnel.
 
