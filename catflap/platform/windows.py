@@ -69,6 +69,10 @@ def _with_log(script: str) -> str:
     params = head[len("param("):-1].strip()
     head = "param([string]$Log = ''" + (", " + params if params else "") + ")"
     return (head + "\n"
+            # Windows PowerShell's own modules first (PowerShell 7's path can leak in and break them)
+            "$env:PSModulePath = \"$PSHOME\\Modules;\" + $env:PSModulePath\n"
+            "Import-Module \"$PSHOME\\Modules\\Microsoft.PowerShell.Security\" -ErrorAction SilentlyContinue\n"
+            "Import-Module \"$PSHOME\\Modules\\Microsoft.PowerShell.Management\" -ErrorAction SilentlyContinue\n"
             "trap { if ($Log) { ('ERROR: ' + ($_ | Out-String)) | Out-File -LiteralPath $Log -Append -Encoding utf8 }; exit 1 }\n"
             "& {\n" + rest + "\n} | ForEach-Object { if ($Log) { \"$_\" | Out-File -LiteralPath $Log -Append -Encoding utf8 } }\n"
             "exit 0\n")
