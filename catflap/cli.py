@@ -400,6 +400,22 @@ def cmd_remove(m: Manager, a, out: Out) -> int:
     return EXIT_OK
 
 
+def cmd_remove_tunnels(m: Manager, a, out: Out) -> int:
+    """Windows uninstaller: delete CatFlap's tunnel services and engine (one UAC
+    prompt). Profiles, keys and settings are kept."""
+    b = m.backend
+    if not hasattr(b, "remove_services"):
+        out.say("nothing to remove on this system")
+        return EXIT_OK
+    names = [p.ifname for p in m.store.profiles().values() if b._service_state(p) is not None]
+    if not names and not b.engine.exists():
+        out.say("no CatFlap tunnels installed")
+        return EXIT_OK
+    b.remove_services(names)
+    out.say(f"removed {len(names)} tunnel(s) and the WireGuard engine")
+    return EXIT_OK
+
+
 def _passphrase(confirm: bool) -> str | None:
     if os.environ.get("CATFLAP_PASSPHRASE"):
         return os.environ["CATFLAP_PASSPHRASE"]
@@ -600,6 +616,9 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("suggest-subnet", help="suggest a per-site VPN subnet (10.250.N.0/28)")
     p.add_argument("index", type=int, help="site number 0-255")
     p.set_defaults(fn=cmd_suggest_subnet)
+    p = sub.add_parser("remove-tunnels", help="Windows: delete CatFlap's tunnel services and "
+                       "WireGuard engine (used by the uninstaller; profiles are kept)")
+    p.set_defaults(fn=cmd_remove_tunnels)
     p = sub.add_parser("tray", help="start the tray app")
     p.add_argument("--minimized", action="store_true", help="start hidden in the tray")
     p.set_defaults(fn=cmd_tray)

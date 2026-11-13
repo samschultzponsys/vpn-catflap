@@ -12,8 +12,15 @@ Third-party components used at runtime (not bundled in this repository):
   - PySide6 / Qt (LGPLv3) - tray application
   - keyring (MIT) - system keyring access
   - cryptography (Apache-2.0 / BSD) - encrypted export files
-  - NetworkManager, WireGuard tools, WireGuard for Windows - used via their
-    command-line interfaces, not linked
+  - NetworkManager, WireGuard tools - used via their command-line interfaces,
+    not linked
+  - WireGuard for Windows (wireguard.exe, wg.exe; Copyright WireGuard LLC,
+    MIT license, https://git.zx2c4.com/wireguard-windows) - on Windows, the
+    official signed MSI is downloaded from download.wireguard.com onto the
+    user's computer and its programs are run unmodified through their
+    command-line interface. CatFlap does not redistribute them.
+
+WireGuard is a registered trademark of Jason A. Donenfeld.
 
 UniFi is a trademark of Ubiquiti Inc., Omada of TP-Link, and Alta Labs of
 Alta Labs Inc. This project is not affiliated with or endorsed by them.

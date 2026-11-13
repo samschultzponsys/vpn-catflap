@@ -668,35 +668,58 @@ class TrayApp(QtCore.QObject if QtCore else object):
                                               "again from your application menu.")
             self.quit()
 
-    def check_conflicting_apps(self, finder=None) -> None:
-        """Windows: offer to remove WiFiman Desktop, whose Teleport VPN can clash with CatFlap."""
-        if (sys.platform != "win32" and finder is None) or self.settings.get("wifiman_prompt") == "never":
+    def check_conflicting_apps(self, finder=None, wg_finder=None) -> None:
+        """Windows: offer to remove WiFiman Desktop (its Teleport VPN can clash with
+        CatFlap) and WireGuard for Windows (not needed: CatFlap has its own engine, so
+        it's just a second app and tray icon)."""
+        if sys.platform != "win32" and finder is None and wg_finder is None:
+            return
+        from .platform import windows
+        if finder is not None or wg_finder is None:
+            self._offer_uninstall(
+                finder or windows.find_wifiman, "wifiman_prompt", "WiFiman",
+                "Its Teleport VPN changes routes and DNS too, which can interfere with CatFlap's "
+                "connections. CatFlap replaces it, so you can uninstall it.")
+        if wg_finder is not None or finder is None:
+            b = self.m.backend
+
+            def own_engine_and_wg_app():
+                # Only when CatFlap's engine is (or can be) set up; otherwise the app IS the engine.
+                if not (getattr(b, "engine", None) and (b.engine.exists() or b.downloaded_msi())):
+                    return None
+                return windows.find_wireguard_app()
+            self._offer_uninstall(
+                wg_finder or own_engine_and_wg_app, "wireguard_app_prompt", "WireGuard",
+                "CatFlap has WireGuard's engine built in, so the WireGuard app (its window and "
+                "tray icon) isn't needed for CatFlap. Keep it if you use it for other tunnels.\n\n"
+                "Sites set up with it switch to CatFlap's engine the next time you connect "
+                "(Windows asks for permission once per site).")
+
+    def _offer_uninstall(self, find, setting: str, short: str, why: str) -> None:
+        if self.settings.get(setting) == "never":
             return
         try:
-            from .platform import windows
-            info = (finder or windows.find_wifiman)()
+            info = find()
         except Exception:  # noqa: BLE001 - best effort
             return
         if not info:
             return
         box = QtWidgets.QMessageBox(self.window)
-        box.setWindowTitle("WiFiman Desktop is installed")
+        box.setWindowTitle(f"{info['name']} is installed")
         box.setText(f"{info['name']} {info.get('version', '')} is installed on this computer.")
-        box.setInformativeText(
-            "Its Teleport VPN changes routes and DNS too, which can interfere with CatFlap's "
-            "connections. CatFlap replaces it, so you can uninstall it.")
-        remove = box.addButton("Uninstall WiFiman", QtWidgets.QMessageBox.DestructiveRole)
+        box.setInformativeText(why)
+        remove = box.addButton(f"Uninstall {short}", QtWidgets.QMessageBox.DestructiveRole)
         box.addButton("Keep it", QtWidgets.QMessageBox.RejectRole)
         never = box.addButton("Don't ask again", QtWidgets.QMessageBox.ActionRole)
         self.run_dialog(box)
         if box.clickedButton() is never:
-            self.set_setting("wifiman_prompt", "never")
+            self.set_setting(setting, "never")
         elif box.clickedButton() is remove:
             from .platform.windows import uninstall_program
             try:
-                run_blocking(self.window, "Uninstalling WiFiman Desktop…",
+                run_blocking(self.window, f"Uninstalling {info['name']}…",
                              lambda: uninstall_program(info, self.m.backend.run))
-                self.tray.showMessage("CatFlap", "WiFiman Desktop was uninstalled.",
+                self.tray.showMessage("CatFlap", f"{info['name']} was uninstalled.",
                                       QtWidgets.QSystemTrayIcon.Information, 4000)
             except Exception as e:  # noqa: BLE001
                 QtWidgets.QMessageBox.warning(self.window, "CatFlap", friendly_error(e))

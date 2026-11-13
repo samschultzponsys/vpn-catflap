@@ -322,19 +322,20 @@ def short_status(st: Any, err: str | None, busy: bool = False) -> str:
 
 
 def offer_wireguard_install(parent, error: BaseException, backend) -> bool:
-    """If ``error`` means WireGuard for Windows is missing, offer to install it.
-    Returns True when it was installed (the caller should retry)."""
+    """If ``error`` means the WireGuard engine is missing (Windows), offer to download it.
+    Returns True when it was downloaded (the caller should retry)."""
     if type(error).__name__ != "WireGuardMissing" or not hasattr(backend, "install_wireguard"):
         return False
     ans = QtWidgets.QMessageBox.question(
-        parent, "Install WireGuard?",
-        "CatFlap uses WireGuard for Windows for the VPN connection, and it isn't installed.\n\n"
-        "Download the official installer from wireguard.com and run it now? Windows will ask "
-        "for permission once.")
+        parent, "Download the WireGuard engine?",
+        "CatFlap connects using WireGuard, and its engine isn't on this computer yet.\n\n"
+        "Download it from wireguard.com now? It's about 3 MB and runs inside CatFlap: no extra "
+        "app, window or tray icon. Windows asks for permission once when the site is set up.\n\n"
+        "Or choose No and install WireGuard for Windows yourself from wireguard.com.")
     if ans != QtWidgets.QMessageBox.Yes:
         return False
     try:
-        run_blocking(parent, "Installing WireGuard…", backend.install_wireguard)
+        run_blocking(parent, "Downloading WireGuard…", backend.install_wireguard)
     except Exception as e:  # noqa: BLE001
         QtWidgets.QMessageBox.warning(parent, "CatFlap", friendly_error(e))
         return False

@@ -1,17 +1,32 @@
-"""Windows backend: the official WireGuard for Windows tunnel service.
+r"""Windows backend: WireGuard's own tunnel service, without its app.
+
+CatFlap uses ``wireguard.exe`` only as a command-line engine (WireGuard's
+documented "tunnel service" mode), so there's no second window or tray icon.
+The engine comes from the official, signed WireGuard MSI on
+download.wireguard.com: the CatFlap installer (or the app, when it's missing)
+downloads the MSI, and the first site setup extracts ``wireguard.exe`` and
+``wg.exe`` into ``Program Files\CatFlap\WireGuard`` (a folder only
+administrators can change, because the tunnel service runs as SYSTEM). The MSI
+is never installed, so WireGuard's manager service and tray UI never start. If
+WireGuard for Windows is already installed and CatFlap's engine isn't, CatFlap
+uses that instead.
 
 How a site works on Windows:
 
 * **Setup (once per site, one UAC prompt):** ``wireguard.exe
   /installtunnelservice <file>`` creates the service ``WireGuardTunnel$<name>``.
   In the same elevated step catflap sets the service to start on demand and
-  grants *this Windows user* permission to start and stop it.
+  grants *this Windows user* permission to start and stop it. The first setup
+  also puts the engine in place (after checking WireGuard's signature).
 * **Connect / disconnect (no prompt):** ``sc start`` / ``sc stop`` on that
   service, as the normal user.
 * **Changing routes etc.:** the tunnel service reads its .conf file each time it
   starts, so catflap just rewrites the file (owned by the user, readable by
   SYSTEM). No prompt.
-* **Removing a site:** ``/uninstalltunnelservice`` (one UAC prompt).
+* **Removing a site:** stop and delete the service (one UAC prompt); with the
+  last site gone, the engine folder is removed too.
+* **Repairs:** if a site's service or the program it runs is gone (for example
+  after uninstalling WireGuard for Windows), connecting sets it up again.
 
 Status: preview. Written against the WireGuard for Windows docs; needs testing on
 real Windows machines.
@@ -21,6 +36,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import sys
 import tempfile
 from pathlib import Path
 
@@ -28,18 +45,62 @@ from .. import wgconf
 from ..model import PeerConfig, Profile
 from .base import Backend, BackendError, LocalAddress, LocalNetwork, LocalRoute, TunnelStatus
 
-DEFAULT_WIREGUARD = r"C:\Program Files\WireGuard\wireguard.exe"
+DEFAULT_WIREGUARD = r"C:\Program Files\WireGuard\wireguard.exe"     # WireGuard for Windows (the app)
 WIREGUARD_DOWNLOAD = "https://www.wireguard.com/install/"
-WIREGUARD_INSTALLER = "https://download.wireguard.com/windows-client/wireguard-installer.exe"
+WIREGUARD_LISTING = "https://download.wireguard.com/windows-client/latest.sig"
+WIREGUARD_MSI_BASE = "https://download.wireguard.com/windows-client/"
+WIREGUARD_SIGNER = "WireGuard LLC"
+
+
+LONG_TIMEOUT = 900      # seconds: waits on a permission prompt or an uninstaller
+
+
+def run_long(run, cmd):
+    """Run with a long timeout (someone may take a while to answer UAC)."""
+    try:
+        return run(cmd, timeout=LONG_TIMEOUT)
+    except TypeError:                     # simple runners (tests) take only the command
+        return run(cmd)
 
 
 class WireGuardMissing(BackendError):
-    """WireGuard for Windows isn't installed; the app offers to install it."""
+    """No WireGuard engine yet; the app offers to download it."""
+
+
+def _local_app_data() -> Path:
+    return Path(os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local"))
 
 
 def _tunnel_dir() -> Path:
-    base = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
-    return Path(base) / "catflap" / "tunnels"
+    return _local_app_data() / "catflap" / "tunnels"
+
+
+def engine_dir() -> Path:
+    """Where CatFlap keeps its WireGuard engine (admin-only, like any program)."""
+    pf = os.environ.get("ProgramW6432") or os.environ.get("ProgramFiles") or r"C:\Program Files"
+    return Path(pf) / "CatFlap" / "WireGuard"
+
+
+def msi_dirs() -> list[Path]:
+    """Where a downloaded WireGuard MSI may be: next to CatFlap.exe (the installer puts
+    it there) and in CatFlap's data folder (the app downloads it there)."""
+    dirs = [_local_app_data() / "catflap" / "wireguard"]
+    if getattr(sys, "frozen", False):
+        dirs.insert(0, Path(sys.executable).parent / "wireguard")
+    if os.environ.get("CATFLAP_WIREGUARD_MSI_DIR"):
+        dirs.insert(0, Path(os.environ["CATFLAP_WIREGUARD_MSI_DIR"]))
+    return dirs
+
+
+def windows_arch() -> str:
+    arch = (os.environ.get("PROCESSOR_ARCHITEW6432") or os.environ.get("PROCESSOR_ARCHITECTURE") or "").upper()
+    return "arm64" if arch == "ARM64" else "amd64"
+
+
+def latest_msi_name(listing: str, arch: str) -> str | None:
+    """Pick ``wireguard-<arch>-<version>.msi`` out of download.wireguard.com's latest.sig."""
+    m = re.search(rf"(wireguard-{arch}-[0-9.]+\.msi)\s*$", listing, re.M)
+    return m.group(1) if m else None
 
 
 def service_name(profile: Profile) -> str:
@@ -50,9 +111,36 @@ def service_name(profile: Profile) -> str:
 # current user start/stop it (SDDL rights: CC query config, LC query status,
 # RP start, WP stop, RC read control).
 _INSTALL_PS = r"""
-param([string]$Wg, [string]$Conf, [string]$Name, [string]$Sid)
+param([string]$Wg, [string]$Conf, [string]$Name, [string]$Sid, [string]$Msi = '', [string]$Dest = '')
 $ErrorActionPreference = 'Stop'
 $svc = "WireGuardTunnel`$$Name"
+function Test-WireGuardSigned([string]$Path) {
+  $sig = Get-AuthenticodeSignature -FilePath $Path
+  if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notlike '*O=WireGuard LLC*') {
+    throw "$Path is not signed by WireGuard LLC ($($sig.Status)); not using it"
+  }
+}
+if ($Msi -and -not (Test-Path $Wg)) {
+  # Extract (not install) the official MSI into an admin-only folder: no WireGuard app,
+  # manager service or tray icon, just wireguard.exe and wg.exe.
+  $work = Join-Path $env:SystemRoot ("Temp\catflap-wg-" + [guid]::NewGuid())
+  New-Item -ItemType Directory -Path $work | Out-Null
+  try {
+    $copy = Join-Path $work 'wireguard.msi'
+    Copy-Item -LiteralPath $Msi -Destination $copy
+    Test-WireGuardSigned $copy
+    $p = Start-Process -FilePath msiexec.exe -ArgumentList '/a', "`"$copy`"", '/qn', "TARGETDIR=`"$work\x`"" -Wait -PassThru
+    if ($p.ExitCode -ne 0) { throw "extracting WireGuard failed (msiexec $($p.ExitCode))" }
+    New-Item -ItemType Directory -Force -Path $Dest | Out-Null
+    foreach ($f in 'wireguard.exe', 'wg.exe') {
+      $src = Get-ChildItem -Path "$work\x" -Recurse -Filter $f | Select-Object -First 1
+      if (-not $src) { throw "$f wasn't in the WireGuard download" }
+      Test-WireGuardSigned $src.FullName
+      Copy-Item -LiteralPath $src.FullName -Destination (Join-Path $Dest $f) -Force
+    }
+  } finally { Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue }
+}
+if (-not (Test-Path $Wg)) { throw "WireGuard engine not found at $Wg" }
 & $Wg /installtunnelservice $Conf
 for ($i = 0; $i -lt 40 -and -not (Get-Service -Name $svc -ErrorAction SilentlyContinue); $i++) { Start-Sleep -Milliseconds 250 }
 if (-not (Get-Service -Name $svc -ErrorAction SilentlyContinue)) { throw "the WireGuard tunnel service was not created" }
@@ -68,8 +156,24 @@ if ($sd -notlike "*$ace*") {
 """
 
 _UNINSTALL_PS = r"""
-param([string]$Wg, [string]$Name)
-& $Wg /uninstalltunnelservice $Name
+param([string]$Names, [string]$Dest = '')
+foreach ($n in ($Names -split ',')) {
+  if (-not $n) { continue }
+  $svc = "WireGuardTunnel`$$n"
+  & sc.exe stop $svc | Out-Null
+  & sc.exe delete $svc | Out-Null
+  for ($i = 0; $i -lt 40 -and (Get-Service -Name $svc -ErrorAction SilentlyContinue); $i++) { Start-Sleep -Milliseconds 250 }
+}
+# Last CatFlap tunnel gone: remove the engine too.
+if ($Dest -and (Test-Path $Dest)) {
+  $using = Get-CimInstance Win32_Service | Where-Object { $_.PathName -like "*$Dest*" }
+  if (-not $using) {
+    Remove-Item -LiteralPath $Dest -Recurse -Force -ErrorAction SilentlyContinue
+    $parent = Split-Path $Dest
+    if ((Test-Path $parent) -and -not (Get-ChildItem $parent)) { Remove-Item -LiteralPath $parent -Force }
+  }
+}
+exit 0
 """
 
 
@@ -77,34 +181,61 @@ class WindowsBackend(Backend):
     name = "wireguard-windows"
 
     @property
+    def engine(self) -> Path:
+        return engine_dir() / "wireguard.exe"
+
+    @property
     def exe(self) -> str:
-        return os.environ.get("CATFLAP_WIREGUARD_EXE", DEFAULT_WIREGUARD)
+        """The wireguard.exe tunnel services run: CatFlap's engine, else WireGuard for
+        Windows if that's installed, else CatFlap's engine (set up from the MSI)."""
+        if os.environ.get("CATFLAP_WIREGUARD_EXE"):
+            return os.environ["CATFLAP_WIREGUARD_EXE"]
+        if self.engine.exists() or not Path(DEFAULT_WIREGUARD).exists():
+            return str(self.engine)
+        return DEFAULT_WIREGUARD
 
     # ---------------------------------------------------------------- helpers
     def _ps(self, script: str):
         return self.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script])
 
+    def downloaded_msi(self) -> Path | None:
+        for d in msi_dirs():
+            found = sorted(d.glob("wireguard-*.msi")) if d.is_dir() else []
+            if found:
+                return found[-1]
+        return None
+
     def wireguard_installed(self) -> bool:
-        return Path(self.exe).exists()
+        """True when a site can be set up: an engine is in place, or its download is."""
+        return Path(self.exe).exists() or self.downloaded_msi() is not None
 
     def _require_wireguard(self) -> None:
         if not self.wireguard_installed():
-            raise WireGuardMissing("WireGuard for Windows isn't installed. CatFlap can install it "
-                                   f"for you, or get it from {WIREGUARD_DOWNLOAD} (one time).")
+            raise WireGuardMissing(
+                "CatFlap needs the WireGuard engine to connect, and it isn't downloaded yet. "
+                "CatFlap can download it from wireguard.com (about 3 MB, no extra app), or you "
+                f"can install WireGuard for Windows yourself from {WIREGUARD_DOWNLOAD}.")
 
     def install_wireguard(self) -> None:
-        """Download the official WireGuard installer and run it (it asks for UAC itself)."""
+        """Download the official, signed WireGuard MSI from download.wireguard.com.
+        Nothing is installed here: the next site setup extracts the engine from it
+        (after checking its signature) in the same permission prompt."""
         import urllib.request
-        d = Path(tempfile.mkdtemp(prefix="catflap-wg-"))
-        exe = d / "wireguard-installer.exe"
-        req = urllib.request.Request(WIREGUARD_INSTALLER, headers={"User-Agent": "catflap"})
-        with urllib.request.urlopen(req, timeout=120) as r, open(exe, "wb") as f:  # noqa: S310
-            f.write(r.read())
-        res = self._ps(f"$p = Start-Process -FilePath '{exe}' -Wait -PassThru; exit $p.ExitCode")
-        if not self.wireguard_installed():
-            raise BackendError("WireGuard didn't finish installing"
-                               + (f" ({(res.stderr or res.stdout).strip()})" if res.returncode else "")
-                               + f". You can install it from {WIREGUARD_DOWNLOAD}.")
+
+        def get(url: str) -> bytes:
+            req = urllib.request.Request(url, headers={"User-Agent": "catflap"})
+            with urllib.request.urlopen(req, timeout=120) as r:  # noqa: S310 - fixed https URL
+                return r.read()
+        name = latest_msi_name(get(WIREGUARD_LISTING).decode("utf-8", "replace"), windows_arch())
+        if not name:
+            raise BackendError("couldn't find the WireGuard download on download.wireguard.com; "
+                               f"install WireGuard for Windows from {WIREGUARD_DOWNLOAD} instead")
+        data = get(WIREGUARD_MSI_BASE + name)
+        d = msi_dirs()[-1]
+        d.mkdir(parents=True, exist_ok=True)
+        for old in d.glob("wireguard-*.msi"):
+            old.unlink(missing_ok=True)
+        (d / name).write_bytes(data)
 
     def _elevated_script(self, script: str, args: dict[str, str], what: str) -> None:
         """Run a PowerShell script as administrator (one UAC prompt)."""
@@ -114,11 +245,13 @@ class WindowsBackend(Backend):
         argv = ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(ps1)]
         for k, v in args.items():
             argv += [f"-{k}", v]
-        quoted = ",".join("'" + a.replace("'", "''") + "'" for a in argv)
+        # Start-Process joins the list with spaces and doesn't quote, so quote each one
+        # ourselves (paths like "C:\Program Files\..." have spaces).
+        quoted = ",".join("'\"" + a.replace("'", "''") + "\"'" for a in argv)
         launcher = (f"$p = Start-Process -FilePath 'powershell.exe' -ArgumentList {quoted} "
                     "-Verb RunAs -Wait -PassThru -WindowStyle Hidden; exit $p.ExitCode")
         try:
-            res = self._ps(launcher)
+            res = run_long(self.run, ["powershell", "-NoProfile", "-NonInteractive", "-Command", launcher])
         finally:
             ps1.unlink(missing_ok=True)
             try:
@@ -135,6 +268,15 @@ class WindowsBackend(Backend):
         if res.returncode != 0 or not sid.startswith("S-"):
             raise BackendError("couldn't read this Windows user's ID")
         return sid
+
+    def _service_program(self, profile: Profile) -> str | None:
+        """The program a site's service runs (None if unknown)."""
+        res = self.run(["sc", "qc", service_name(profile)])
+        for line in (res.stdout or "").splitlines() if res.returncode == 0 else []:
+            if "BINARY_PATH_NAME" in line:
+                cmd = line.split(":", 1)[1].strip()
+                return cmd[1:].split('"', 1)[0] if cmd.startswith('"') else cmd.split(" /", 1)[0]
+        return None
 
     def _service_state(self, profile: Profile) -> str | None:
         res = self.run(["sc", "query", service_name(profile)])
@@ -158,25 +300,47 @@ class WindowsBackend(Backend):
         return path
 
     # ---------------------------------------------------------------- lifecycle
+    def _needs_setup(self, profile: Profile) -> bool:
+        """The site's service is missing, or the program it runs is gone."""
+        if self._service_state(profile) is None:
+            return True
+        prog = self._service_program(profile)
+        return bool(prog) and not Path(prog).exists()
+
+    def _setup_service(self, profile: Profile, conf: Path) -> None:
+        self._require_wireguard()
+        exe = self.exe
+        msi = self.downloaded_msi() if not Path(exe).exists() else None
+        args = {"Wg": exe, "Conf": str(conf), "Name": profile.ifname, "Sid": self._user_sid()}
+        if msi:
+            args.update(Msi=str(msi), Dest=str(engine_dir()))
+        self._elevated_script(_INSTALL_PS, args, f"Setting up {profile.display}")
+        if msi and msi.parent == msi_dirs()[-1]:     # the app's own download isn't needed any more
+            msi.unlink(missing_ok=True)
+
     def install(self, profile: Profile, cfg: PeerConfig) -> str:
         self._require_wireguard()
         path = self._write_conf(profile, cfg)
-        if self._service_state(profile) is None:
-            self._elevated_script(_INSTALL_PS, {"Wg": self.exe, "Conf": str(path),
-                                                "Name": profile.ifname, "Sid": self._user_sid()},
-                                  f"Setting up {profile.display} in WireGuard")
+        if self._needs_setup(profile):
+            self._setup_service(profile, path)
         return profile.ifname
 
     def remove(self, profile: Profile) -> None:
         if self._service_state(profile) is not None:
-            self._elevated_script(_UNINSTALL_PS, {"Wg": self.exe, "Name": profile.ifname},
-                                  f"Removing {profile.display} from WireGuard")
+            self.remove_services([profile.ifname], f"Removing {profile.display}")
         self._conf_path(profile).unlink(missing_ok=True)
 
+    def remove_services(self, ifnames: list[str], what: str = "Removing CatFlap's tunnels") -> None:
+        """Delete tunnel services (one UAC prompt); drops the engine when none use it."""
+        self._elevated_script(_UNINSTALL_PS, {"Names": ",".join(ifnames), "Dest": str(engine_dir())}, what)
+
     def up(self, profile: Profile) -> None:
-        if self._service_state(profile) is None:
-            raise BackendError(f"{profile.display} isn't set up in WireGuard yet; use "
-                               "Re-apply settings (Advanced view) to set it up")
+        if self._needs_setup(profile):
+            conf = self._conf_path(profile)
+            if not conf.exists():
+                raise BackendError(f"{profile.display} isn't set up yet; use Re-apply settings "
+                                   "(Advanced view) to set it up")
+            self._setup_service(profile, conf)       # repair (one permission prompt)
         res = self.run(["sc", "start", service_name(profile)])
         if res.returncode != 0 and "1056" not in (res.stdout or ""):     # 1056: already running
             raise BackendError(f"Windows couldn't start the tunnel: {(res.stdout or res.stderr).strip()}")
@@ -228,7 +392,7 @@ UNINSTALL_KEYS = (
 )
 
 
-def find_installed(prefix: str, winreg_mod=None) -> dict | None:
+def find_installed(prefix: str, winreg_mod=None, exact: bool = False) -> dict | None:
     """Find an installed program whose display name starts with ``prefix`` (e.g.
     "WiFiman"). Returns {name, version, uninstall, quiet_uninstall, per_user} or None."""
     if winreg_mod is None:
@@ -255,7 +419,8 @@ def find_installed(prefix: str, winreg_mod=None) -> dict | None:
                             except OSError:
                                 return ""
                         name = val("DisplayName")
-                        if name and name.lower().startswith(prefix.lower()):
+                        n, want = (name or "").strip().lower(), prefix.lower()
+                        if n == want if exact else (n and n.startswith(want)):
                             return {"name": name, "version": val("DisplayVersion"),
                                     "uninstall": val("UninstallString"),
                                     "quiet_uninstall": val("QuietUninstallString"),
@@ -270,6 +435,11 @@ def find_wifiman(winreg_mod=None) -> dict | None:
     return find_installed("WiFiman", winreg_mod)
 
 
+def find_wireguard_app(winreg_mod=None) -> dict | None:
+    """WireGuard for Windows (the app with its own window and tray icon)."""
+    return find_installed("WireGuard", winreg_mod, exact=True)
+
+
 def uninstall_program(info: dict, run) -> None:
     """Run a program's own uninstaller and wait for it (UAC if installed for all users)."""
     cmdline = info.get("uninstall") or info.get("quiet_uninstall")
@@ -280,7 +450,7 @@ def uninstall_program(info: dict, run) -> None:
     escaped = cmdline.replace("'", "''")
     script = (f"$p = Start-Process -FilePath 'cmd.exe' -ArgumentList '/c', '\"{escaped}\"' "
               f"{verb}-Wait -PassThru; exit $p.ExitCode")
-    res = run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script])
+    res = run_long(run, ["powershell", "-NoProfile", "-NonInteractive", "-Command", script])
     if res.returncode != 0:
         raise BackendError(f"{info.get('name')} wasn't uninstalled (was the prompt declined?). "
                            "You can remove it from Settings > Apps.")

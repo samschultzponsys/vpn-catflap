@@ -386,3 +386,21 @@ def test_offer_to_remove_wifiman(qapp, manager, monkeypatch):
     clicked.clear()
     app.check_conflicting_apps(finder=lambda: info)
     assert not clicked                                   # not asked again
+
+
+def test_offer_to_remove_wireguard_app(qapp, manager, monkeypatch):
+    app = tray.TrayApp(qapp, manager)
+    app.timer.stop()
+    info = {"name": "WireGuard", "version": "1.1.1", "uninstall": "MsiExec.exe /X{X}"}
+    seen = {}
+
+    def fake_exec(box):
+        buttons = {b.text(): b for b in box.buttons()}
+        seen["texts"] = sorted(buttons)
+        seen["why"] = box.informativeText()
+        box.clickedButton = lambda: buttons["Keep it"]
+        return 0
+    monkeypatch.setattr(app, "run_dialog", fake_exec)
+    app.check_conflicting_apps(wg_finder=lambda: info)
+    assert seen["texts"] == ["Don't ask again", "Keep it", "Uninstall WireGuard"]
+    assert "built in" in seen["why"]

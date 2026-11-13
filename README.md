@@ -65,7 +65,7 @@ from the UniFi UI and use `catflap import` instead. Every safety rule still appl
 |---|---|---|
 | Fedora (KDE Plasma, Wayland) | NetworkManager (nmcli, or D-Bus inside the Flatpak) | primary; Flatpak recommended |
 | Debian / Ubuntu | NetworkManager | supported |
-| Windows 10/11 | WireGuard for Windows tunnel service | under development; not yet tested on real Windows machines |
+| Windows 10/11 | WireGuard's tunnel service (engine only, no WireGuard app) | preview; tested automatically on Windows, real-PC testing in progress |
 
 ## Install
 
@@ -160,20 +160,38 @@ pipx install --system-site-packages https://github.com/samschultzponsys/vpn-catf
    [releases page](https://github.com/samschultzponsys/vpn-catflap/releases) and run it.
    It installs for your user only, so no administrator rights are needed for CatFlap
    itself.
-2. If **WireGuard for Windows** isn't installed yet, the installer downloads the
-   official installer from download.wireguard.com and runs it. Windows asks for
-   permission once, because WireGuard installs a network driver. If WireGuard is
-   missing later, CatFlap offers to install it the same way.
+2. The **Select Components** page shows what gets installed:
+   - **CatFlap** (always).
+   - **WireGuard engine (download from wireguard.com, about 3 MB)**, ticked by default.
+     CatFlap connects with WireGuard. Setup downloads WireGuard's official, signed MSI,
+     but doesn't install the WireGuard *app*: CatFlap only uses its engine
+     (`wireguard.exe` and `wg.exe`), so there's no second window or tray icon. To skip
+     the download, choose **Custom** and untick it. CatFlap then uses WireGuard for
+     Windows if you install it yourself, or offers to download the engine when you add
+     a site.
+
+   The **Ready to Install** page lists everything that will be downloaded. Nothing
+   else is installed.
 3. Start **CatFlap** from the Start menu.
 
 **On Windows:**
-- Adding a site asks for administrator rights **once** (Windows' UAC prompt), to set the
-  site up in WireGuard and let your account start and stop it. Connecting and
-  disconnecting from the tray don't need any prompts after that.
-- Removing a site asks once more.
+- Adding a site asks for administrator rights **once** (Windows' UAC prompt). The first
+  time, that same prompt also checks the engine's WireGuard LLC signature and puts it in
+  `C:\Program Files\CatFlap\WireGuard` (tunnels run as SYSTEM, so the engine has to be
+  somewhere only administrators can change). Connecting and disconnecting from the tray
+  don't need any prompts after that.
+- Removing a site asks once more. Removing the last site also removes the engine.
+  Uninstalling CatFlap removes its tunnels and engine (one prompt, only if there are
+  any). Your sites, keys and settings stay, in case you reinstall.
+- If **WireGuard for Windows** (the app) is installed, CatFlap uses its own engine
+  anyway and offers to uninstall the app, since CatFlap doesn't need it. Choose
+  **Keep it** if you use it for other tunnels. Sites that were set up with the app
+  switch to CatFlap's engine the next time you connect (one prompt per site).
 - If **WiFiman Desktop** (Ubiquiti's Teleport app) is installed, CatFlap offers to
   uninstall it when it starts, since both change routes and DNS. Choose **Keep it**
   or **Don't ask again** to leave it.
+- If a site's tunnel disappears (for example after uninstalling WireGuard for Windows),
+  connecting sets it up again (one prompt).
 - Updates: **Help → Check for updates…** downloads the new installer, runs it silently,
   and CatFlap reopens as the new version.
 - The command line is `catflap-cli.exe` in the install folder. Windows file names
@@ -651,7 +669,7 @@ Exit codes: `0` ok, `1` error, `2` usage, `3` checks failed.
 Environment variables: `CATFLAP_API_KEY`, `CATFLAP_PASSWORD`, `CATFLAP_PASSPHRASE`
 (secrets for non-interactive use), `CATFLAP_CONFIG_DIR` (state location),
 `CATFLAP_SECRETS=file` (use a 0600 file instead of the keyring, e.g. headless),
-`CATFLAP_WIREGUARD_EXE` (Windows: path to `wireguard.exe`),
+`CATFLAP_WIREGUARD_EXE` (Windows: use this `wireguard.exe` instead of CatFlap's engine),
 `CATFLAP_INSTALL_METHOD` (override install-method detection),
 `CATFLAP_BACKEND=dbus|nmcli` (choose the NetworkManager backend), `CATFLAP_ALLOW_ROOT=1`
 (allow running as root; not recommended).
@@ -683,7 +701,8 @@ Each item maps to a numbered problem in [docs/TEST-CHECKLIST.md](docs/TEST-CHECK
 | Gateways, profiles, settings | `~/.config/catflap/state.json` (0600); Flatpak: `~/.var/app/io.github.samschultzponsys.CatFlap/config/catflap/` | `%APPDATA%\catflap\state.json` |
 | API keys, passwords, WireGuard private keys | System keyring (service `catflap`) | Windows Credential Manager |
 | Keyring fallback (`CATFLAP_SECRETS=file`) | `~/.config/catflap/secrets.json` (0600) | same folder |
-| The live connection | NetworkManager connection `catflap <name>` | `%LOCALAPPDATA%\catflap\tunnels\cf-<name>.conf` + WireGuard tunnel service |
+| The live connection | NetworkManager connection `catflap <name>` | `%LOCALAPPDATA%\catflap\tunnels\cf-<name>.conf` + tunnel service `WireGuardTunnel$cf-<name>` |
+| WireGuard engine | – (NetworkManager has WireGuard built in) | `C:\Program Files\CatFlap\WireGuard\` (`wireguard.exe`, `wg.exe`) |
 
 Private keys are generated on the device. With `provision`, the gateway only
 ever sees the public key.

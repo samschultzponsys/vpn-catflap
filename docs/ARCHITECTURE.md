@@ -110,10 +110,20 @@ private key in the same response.
   `GetSettings` and applies the same `check_settings()` verification as the nmcli
   backend. Local routes and addresses come from each device's `IP4Config`, and
   pings use an unprivileged ICMP socket.
-- **Windows** (under development): `wireguard.exe /installtunnelservice` on
-  connect and `/uninstalltunnelservice` on disconnect, elevated through UAC for
-  those two calls only. Config files live in `%LOCALAPPDATA%\catflap\tunnels`,
-  restricted to the user and SYSTEM.
+- **Windows** (preview): WireGuard's documented *tunnel service* mode, without
+  the WireGuard app. The official signed MSI is downloaded from
+  download.wireguard.com (by the installer, or by the app when missing) and, in the
+  first site's elevated step, extracted with `msiexec /a` (never installed, so no
+  manager service or tray UI); `wireguard.exe` and `wg.exe` are checked for the
+  WireGuard LLC Authenticode signature and copied to
+  `%ProgramFiles%\CatFlap\WireGuard`. Each site is one elevated
+  `wireguard.exe /installtunnelservice` that also makes the service on-demand and
+  grants the user start/stop rights; connect/disconnect are `sc start`/`sc stop`
+  without UAC. Config files live in `%LOCALAPPDATA%\catflap\tunnels`, restricted
+  to the user and SYSTEM. If WireGuard for Windows is installed and CatFlap's
+  engine isn't (opt-out), its `wireguard.exe` is used instead. The release
+  workflow runs `packaging/windows/smoke_test.py` on a Windows runner (download,
+  extract, connect, disconnect, remove).
 
 ## Flatpak
 

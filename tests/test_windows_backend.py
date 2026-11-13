@@ -10,6 +10,7 @@ class FakeWindows:
     def __init__(self):
         self.cmds = []
         self.services = {}            # name -> state
+        self.programs = {}            # name -> program the service runs
         self.elevated = []
 
     def __call__(self, cmd):
@@ -20,6 +21,13 @@ class FakeWindows:
                 if name not in self.services:
                     return CmdResult(1060, "service does not exist", "")
                 return CmdResult(0, f"        STATE              : 4  {self.services[name]}\n", "")
+            if cmd[1] == "qc":
+                if name not in self.services:
+                    return CmdResult(1060, "service does not exist", "")
+                prog = self.programs.get(name)
+                if prog is None:
+                    return CmdResult(0, "", "")
+                return CmdResult(0, f'        BINARY_PATH_NAME   : "{prog}" /tunnelservice "c.conf"\n', "")
             if cmd[1] == "start":
                 self.services[name] = "RUNNING"
                 return CmdResult(0, "", "")
@@ -33,7 +41,7 @@ class FakeWindows:
             if "Start-Process" in script:
                 self.elevated.append(script)
                 # the elevated install creates a stopped service, uninstall removes it
-                if "'-Conf'" in script:
+                if '-Conf"' in script:
                     self.services["WireGuardTunnel$cf-home"] = "STOPPED"
                 else:
                     self.services.pop("WireGuardTunnel$cf-home", None)
@@ -78,6 +86,7 @@ def test_one_admin_prompt_per_site_then_no_prompts(tmp_path, monkeypatch):
 
 def test_missing_wireguard_is_explained(tmp_path, monkeypatch):
     monkeypatch.setenv("CATFLAP_WIREGUARD_EXE", str(tmp_path / "nope.exe"))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
     import pytest
     from catflap.platform.base import BackendError
     with pytest.raises(BackendError, match="wireguard.com"):
@@ -89,12 +98,34 @@ def test_install_script_grants_the_user_start_and_stop():
     assert "start= demand" in windows._INSTALL_PS
 
 
-def test_install_wireguard_downloads_official_installer(tmp_path, monkeypatch):
-    exe = tmp_path / "wireguard.exe"
-    monkeypatch.setenv("CATFLAP_WIREGUARD_EXE", str(exe))
+LISTING = ("untrusted comment: verify with wireguard-windows-release.pub\nRWQ...\n"
+           "f64b  wireguard-amd64-1.1.1.msi\n1390  wireguard-arm64-1.1.1.msi\n"
+           "b769  wireguard-x86-1.1.1.msi\n")
+
+
+def test_latest_msi_name():
+    assert windows.latest_msi_name(LISTING, "amd64") == "wireguard-amd64-1.1.1.msi"
+    assert windows.latest_msi_name(LISTING, "arm64") == "wireguard-arm64-1.1.1.msi"
+    assert windows.latest_msi_name("nothing", "amd64") is None
+
+
+def _engine_env(tmp_path, monkeypatch):
+    monkeypatch.delenv("CATFLAP_WIREGUARD_EXE", raising=False)
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
+    monkeypatch.setenv("ProgramW6432", str(tmp_path / "pf"))
+    monkeypatch.setattr(windows, "DEFAULT_WIREGUARD", str(tmp_path / "pf" / "WireGuard" / "wireguard.exe"))
+    monkeypatch.setenv("PROCESSOR_ARCHITECTURE", "AMD64")
+    monkeypatch.delenv("PROCESSOR_ARCHITEW6432", raising=False)
+
+
+def test_install_wireguard_downloads_the_msi_without_installing_it(tmp_path, monkeypatch):
+    _engine_env(tmp_path, monkeypatch)
     fetched = []
 
     class Resp:
+        def __init__(self, data):
+            self.data = data
+
         def __enter__(self):
             return self
 
@@ -102,30 +133,102 @@ def test_install_wireguard_downloads_official_installer(tmp_path, monkeypatch):
             return False
 
         def read(self):
-            return b"MZ"
+            return self.data
 
     def fake_urlopen(req, timeout=0):
         fetched.append(req.full_url)
-        return Resp()
+        return Resp(LISTING.encode() if req.full_url.endswith(".sig") else b"MSI")
     monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
     w = FakeWindows()
-    real = w.__call__
-
-    def run(cmd):
-        if cmd[0] == "powershell" and "wireguard-installer.exe" in cmd[-1]:
-            exe.write_text("")                       # the installer "installs" WireGuard
-            return CmdResult(0, "", "")
-        return real(cmd)
-    b = windows.WindowsBackend(run)
+    b = windows.WindowsBackend(w)
     assert not b.wireguard_installed()
     b.install_wireguard()
-    assert b.wireguard_installed()
-    assert fetched == ["https://download.wireguard.com/windows-client/wireguard-installer.exe"]
+    assert b.wireguard_installed() and not w.cmds                  # nothing run, nothing installed
+    assert fetched == ["https://download.wireguard.com/windows-client/latest.sig",
+                       "https://download.wireguard.com/windows-client/wireguard-amd64-1.1.1.msi"]
+    assert b.downloaded_msi() == tmp_path / "local" / "catflap" / "wireguard" / "wireguard-amd64-1.1.1.msi"
+
+
+def test_first_site_extracts_the_engine_in_the_same_prompt(tmp_path, monkeypatch):
+    _engine_env(tmp_path, monkeypatch)
+    msi_dir = tmp_path / "local" / "catflap" / "wireguard"
+    msi_dir.mkdir(parents=True)
+    (msi_dir / "wireguard-amd64-1.1.1.msi").write_bytes(b"MSI")
+    w = FakeWindows()
+    b = windows.WindowsBackend(w)
+    assert b.exe == str(tmp_path / "pf" / "CatFlap" / "WireGuard" / "wireguard.exe")
+    b.install(profile(), cfg())
+    assert len(w.elevated) == 1
+    script = w.elevated[0]
+    assert '"-Msi"' in script and "wireguard-amd64-1.1.1.msi" in script
+    assert str(tmp_path / "pf" / "CatFlap" / "WireGuard") in script
+    assert not (msi_dir / "wireguard-amd64-1.1.1.msi").exists()   # used up
+
+
+def test_engine_preferred_over_wireguard_app_and_app_used_without_engine(tmp_path, monkeypatch):
+    _engine_env(tmp_path, monkeypatch)
+    app = tmp_path / "pf" / "WireGuard" / "wireguard.exe"
+    app.parent.mkdir(parents=True)
+    app.write_text("")
+    b = windows.WindowsBackend(FakeWindows())
+    assert b.exe == str(app) and b.wireguard_installed()           # opted out: use the app
+    b.engine.parent.mkdir(parents=True)
+    b.engine.write_text("")
+    assert b.exe == str(b.engine)                                  # engine: no second UI
+
+
+def test_install_script_checks_signature_and_extracts_not_installs():
+    ps = windows._INSTALL_PS
+    assert "Get-AuthenticodeSignature" in ps and "WireGuard LLC" in ps
+    assert "'/a'" in ps and "/i" not in ps.replace("/installtunnelservice", "")
+
+
+def test_connect_repairs_a_site_whose_program_is_gone(tmp_path, monkeypatch):
+    _engine_env(tmp_path, monkeypatch)
+    w = FakeWindows()
+    b = windows.WindowsBackend(w)
+    b.engine.parent.mkdir(parents=True)
+    b.engine.write_text("")
+    p = profile()
+    b.install(p, cfg())
+    assert len(w.elevated) == 1
+    # WireGuard for Windows was uninstalled; the service still points at it
+    w.programs["WireGuardTunnel$cf-home"] = str(tmp_path / "pf" / "WireGuard" / "wireguard.exe")
+    b.up(p)
+    assert len(w.elevated) == 2 and b.status(p).active
+
+
+def test_remove_deletes_service_and_maybe_engine(tmp_path, monkeypatch):
+    _engine_env(tmp_path, monkeypatch)
+    w = FakeWindows()
+    b = windows.WindowsBackend(w)
+    w.services["WireGuardTunnel$cf-home"] = "STOPPED"
+    b.remove(profile())
+    assert '"-Names"' in w.elevated[0] and '"cf-home"' in w.elevated[0]
+    assert "Remove-Item" in windows._UNINSTALL_PS and "sc.exe delete" in windows._UNINSTALL_PS
+
+
+def test_elevated_arguments_with_spaces_are_quoted(tmp_path, monkeypatch):
+    _engine_env(tmp_path, monkeypatch)
+    w = FakeWindows()
+    b = windows.WindowsBackend(w)
+    b._elevated_script("x", {"Wg": r"C:\Program Files\CatFlap\WireGuard\wireguard.exe"}, "t")
+    assert "'\"C:\\Program Files\\CatFlap\\WireGuard\\wireguard.exe\"'" in w.elevated[0]
+
+
+def test_find_wireguard_app_is_exact():
+    path = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
+    reg = FakeWinreg({("HKLM", path): {
+        "a": {"DisplayName": "WireGuard Something Else"},
+        "b": {"DisplayName": "WireGuard", "DisplayVersion": "1.1.1", "UninstallString": "MsiExec.exe /X{X}"}}})
+    info = windows.find_wireguard_app(reg)
+    assert info["name"] == "WireGuard" and info["version"] == "1.1.1"
 
 
 def test_missing_wireguard_raises_the_offerable_error(tmp_path, monkeypatch):
     import pytest
     monkeypatch.setenv("CATFLAP_WIREGUARD_EXE", str(tmp_path / "nope.exe"))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
     with pytest.raises(windows.WireGuardMissing):
         windows.WindowsBackend(FakeWindows()).install(profile(), cfg())
 

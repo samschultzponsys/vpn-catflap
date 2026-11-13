@@ -3,6 +3,28 @@
 Versions are `MAJOR.MINOR`; the minor number runs 0–9 and then rolls over
 (1.9 → 2.0). Every release is tagged `vMAJOR.MINOR`.
 
+## 1.5
+
+- **Windows: no second WireGuard app.** CatFlap now uses only WireGuard's engine
+  (`wireguard.exe`/`wg.exe` in its documented tunnel-service mode). The official signed
+  MSI is downloaded from wireguard.com and the engine is extracted from it, not
+  installed, so the WireGuard window and tray icon never appear. The first site setup
+  puts the engine in `Program Files\CatFlap\WireGuard` in the same permission prompt,
+  after checking WireGuard LLC's signature.
+- Windows installer: a **Select Components** page shows the WireGuard engine download
+  (about 3 MB) and lets you untick it; the Ready page lists exactly what will be
+  downloaded. Opted out, CatFlap uses WireGuard for Windows if you install it, or offers
+  to download the engine when you add a site.
+- Windows: if WireGuard for Windows (the app) is installed, CatFlap offers to uninstall
+  it (Keep it / Don't ask again). Sites set up with it switch to CatFlap's engine on the
+  next connect; any site whose tunnel or program has gone is repaired on connect.
+- Windows: removing the last site removes the engine; uninstalling CatFlap removes its
+  tunnels and engine (`catflap-cli remove-tunnels`).
+- Windows fixes: the permission-prompt step no longer gives up after 30 seconds, and
+  paths with spaces (like `C:\Program Files`) are passed to it correctly.
+- Releases are now checked on a real Windows machine (GitHub's Windows runner): download,
+  set up, connect, disconnect and remove a test tunnel.
+
 ## 1.4
 
 - Windows: the installer downloads and runs the official WireGuard for Windows

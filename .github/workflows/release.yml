@@ -4,7 +4,8 @@
 #
 # Every asset carries the version in its name: catflap-X.Y.tar.gz,
 # catflap-X.Y-py3-none-any.whl, catflap-X.Y-1.noarch.rpm, catflap-X.Y.flatpak,
-# catflap-X.Y-setup.exe (Windows).
+# catflap-X.Y-setup.exe (Windows). WireGuard is never bundled: the Windows
+# installer/app download it from wireguard.com on the user's PC.
 # All releases and assets are kept: release files don't count against Actions
 # or Packages storage. The only Actions storage used is the files passed
 # between jobs (expire after one day). No caches, no GitHub Packages.
@@ -140,13 +141,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - name: Build CatFlap.exe and catflap.exe
+      - name: Build CatFlap.exe and catflap-cli.exe
         shell: pwsh
         run: |
           python -m pip install -q pyinstaller pillow PySide6-Essentials keyring cryptography
           python packaging/windows/make_ico.py packaging/windows/catflap.ico
           pyinstaller --noconfirm packaging/windows/catflap.spec
           dist\CatFlap\catflap-cli.exe version
+      - name: Smoke test the tunnel backend on real Windows
+        timeout-minutes: 8
+        shell: pwsh
+        run: python packaging/windows/smoke_test.py
       - name: Build the installer
         shell: pwsh
         run: |
@@ -177,5 +182,5 @@ jobs:
           v="${{ needs.meta.outputs.version }}"
           ls -la out
           notes=$(awk -v h="## $v" '$0==h{f=1;next} /^## /{f=0} f' CHANGELOG.md)
-          notes="${notes}"$'\n\n'"**Windows:** catflap-$v-setup.exe is a preview. Install [WireGuard for Windows](https://www.wireguard.com/install/) first."
+          notes="${notes}"$'\n\n'"**Windows:** catflap-$v-setup.exe is a preview. It can download WireGuard's engine from wireguard.com (you can untick it); the WireGuard app itself isn't installed."
           gh release create "v$v" out/* --target "$GITHUB_SHA" --title "CatFlap $v" --notes "${notes:-See CHANGELOG.md}"

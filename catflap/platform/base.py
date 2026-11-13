@@ -1,8 +1,9 @@
 """Platform backend interface: how a normalized, already-safe tunnel becomes a
 real OS connection, and how the local network is inspected.
 
-Linux: NetworkManager (nmcli). Windows: the official WireGuard for Windows
-tunnel service. No custom VPN daemon, no wg-quick.
+Linux: NetworkManager (nmcli or D-Bus). Windows: WireGuard's own tunnel
+service, run from CatFlap's copy of the official engine. No custom VPN daemon,
+no wg-quick.
 """
 
 from __future__ import annotations
