@@ -54,8 +54,11 @@ def set_enabled(enabled: bool) -> None:
         import winreg
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0, winreg.KEY_SET_VALUE) as k:
             if enabled:
-                exe = sys.executable if getattr(sys, "frozen", False) else f'"{sys.executable}" -m catflap'
-                winreg.SetValueEx(k, "catflap", 0, winreg.REG_SZ, f"{exe} tray --minimized")
+                if getattr(sys, "frozen", False):        # installed CatFlap.exe
+                    cmd = f'"{sys.executable}" --minimized'
+                else:
+                    cmd = f'"{sys.executable}" -m catflap tray --minimized'
+                winreg.SetValueEx(k, "catflap", 0, winreg.REG_SZ, cmd)
             else:
                 try:
                     winreg.DeleteValue(k, "catflap")

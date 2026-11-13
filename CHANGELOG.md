@@ -3,6 +3,16 @@
 Versions are `MAJOR.MINOR`; the minor number runs 0–9 and then rolls over
 (1.9 → 2.0). Every release is tagged `vMAJOR.MINOR`.
 
+## 1.3
+
+- **Windows (preview):** a `catflap-X.Y-setup.exe` installer on every release (per-user
+  install, Start menu entry, optional start at sign-in). Uses WireGuard for Windows;
+  each site needs one administrator prompt when it's set up, then connecting and
+  disconnecting need no prompts. Updates install silently and reopen CatFlap.
+- **Import merges** with what's already on the computer: new items are added,
+  identical ones left alone, and for conflicts you choose keep mine / replace / keep
+  both (`--on-conflict` on the command line).
+
 ## 1.2
 
 - Tray icon with several sites connected: the tile blends their colors (default), or

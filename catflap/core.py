@@ -566,46 +566,116 @@ class Manager:
         payload["app_version"] = __version__
         return bundle.seal(payload, passphrase)
 
-    def import_bundle(self, text: str, passphrase: str | None, overwrite: bool = False,
-                      install: bool = True) -> list[str]:
+    # Fields that make two copies of a gateway / site "the same thing".
+    _GW_KEYS = ("vendor", "url", "options", "username")
+    _P_KEYS = ("peer_public_key", "endpoint_host", "endpoint_port", "routes", "addresses")
+
+    def _same_gateway(self, name: str, cfg: dict, secrets: dict) -> bool:
+        mine = self.store.gateways().get(name) or {}
+        return (all(mine.get(k) == cfg.get(k) for k in self._GW_KEYS)
+                and self.secrets.get(gateway_key(name, "api_key")) == secrets.get(gateway_key(name, "api_key")))
+
+    def _same_profile(self, name: str, pd: dict, secrets: dict) -> bool:
+        mine = self.store.profiles().get(name)
+        if not mine:
+            return False
+        md = mine.to_dict()
+        return (all(md.get(k) == pd.get(k) for k in self._P_KEYS)
+                and self.secrets.get(profile_key(name, "private_key")) == secrets.get(profile_key(name, "private_key")))
+
+    def preview_bundle(self, text: str, passphrase: str | None) -> dict[str, list[str]]:
+        """What importing would do: new / identical / conflicting gateways and sites."""
         payload = bundle.open_bundle(text, passphrase)
-        msgs = []
+        sec = payload.get("secrets", {})
+        out: dict[str, list[str]] = {k: [] for k in ("new_gateways", "same_gateways", "conflict_gateways",
+                                                     "new_sites", "same_sites", "conflict_sites")}
         for g, cfg in payload.get("gateways", {}).items():
-            if g in self.store.gateways() and not overwrite:
-                msgs.append(f"Skipped gateway '{g}' (exists; use --overwrite).")
-                continue
-            self.store.put_gateway(g, cfg)
-            for s in GATEWAY_SECRETS:
-                v = payload["secrets"].get(gateway_key(g, s))
-                if v:
-                    self.secrets.set(gateway_key(g, s), v)
-            msgs.append(f"Imported gateway '{g}'.")
+            key = ("new_gateways" if g not in self.store.gateways() else
+                   "same_gateways" if self._same_gateway(g, cfg, sec) else "conflict_gateways")
+            out[key].append(g)
         for n, pd in payload.get("profiles", {}).items():
-            if n in self.store.profiles() and not overwrite:
-                msgs.append(f"Skipped profile '{n}' (exists; use --overwrite).")
-                continue
-            p = Profile.from_dict(pd)
-            p.backend_id = None   # belongs to the other machine
-            p.ifname = netutil.unique_ifname(p.name, self._taken_ifnames(p.name)) \
-                if p.ifname in self._taken_ifnames(p.name) else p.ifname
-            for s in PROFILE_SECRETS:
-                v = payload["secrets"].get(profile_key(n, s))
+            key = ("new_sites" if n not in self.store.profiles() else
+                   "same_sites" if self._same_profile(n, pd, sec) else "conflict_sites")
+            out[key].append(pd.get("label") or n)
+        return out
+
+    def import_bundle(self, text: str, passphrase: str | None, overwrite: bool = False,
+                      install: bool = True, on_conflict: str = "keep") -> list[str]:
+        """Merge an export into this computer.
+
+        New gateways and sites are added; identical ones are left alone. For ones
+        with the same name but different settings, ``on_conflict`` decides:
+        "keep" (keep this computer's), "replace" (use the imported one) or "both"
+        (add the imported one under a new name). ``overwrite`` means "replace".
+        """
+        if overwrite:
+            on_conflict = "replace"
+        if on_conflict not in ("keep", "replace", "both"):
+            raise CatflapError("on_conflict must be keep, replace or both")
+        payload = bundle.open_bundle(text, passphrase)
+        sec = payload.get("secrets", {})
+        msgs: list[str] = []
+        gw_renamed: dict[str, str] = {}
+
+        for g, cfg in payload.get("gateways", {}).items():
+            target = g
+            if g in self.store.gateways():
+                if self._same_gateway(g, cfg, sec):
+                    msgs.append(f"Gateway '{g}' is already here.")
+                    continue
+                if on_conflict == "keep":
+                    msgs.append(f"Kept this computer's gateway '{g}'.")
+                    continue
+                if on_conflict == "both":
+                    target = self.unique_gateway_name(f"{g}-imported")
+                    gw_renamed[g] = target
+            self.store.put_gateway(target, cfg)
+            for k in GATEWAY_SECRETS:
+                v = sec.get(gateway_key(g, k))
                 if v:
-                    self.secrets.set(profile_key(n, s), v)
+                    self.secrets.set(gateway_key(target, k), v)
+            msgs.append(f"Imported gateway '{target}'." if target == g else
+                        f"Imported gateway '{g}' as '{target}'.")
+
+        for n, pd in payload.get("profiles", {}).items():
+            p = Profile.from_dict(pd)
+            target = n
+            if n in self.store.profiles():
+                if self._same_profile(n, pd, sec):
+                    msgs.append(f"Site '{p.display}' is already here.")
+                    continue
+                if on_conflict == "keep":
+                    msgs.append(f"Kept this computer's site '{p.display}'.")
+                    continue
+                if on_conflict == "both":
+                    p.label = f"{p.display} (imported)"
+                    target = self.unique_profile_name(p.label)
+                elif on_conflict == "replace":
+                    self._teardown(self.store.profile(n), revoke=False)
+            p.name = target
+            p.gateway = gw_renamed.get(p.gateway, p.gateway) if p.gateway else p.gateway
+            p.backend_id = None          # belongs to the other machine
+            p.installed_routes = []
+            if p.ifname in self._taken_ifnames(target):
+                p.ifname = netutil.unique_ifname(target, self._taken_ifnames(target))
+            for k in PROFILE_SECRETS:
+                v = sec.get(profile_key(n, k))
+                if v:
+                    self.secrets.set(profile_key(target, k), v)
             self.store.put_profile(p)
             self.store.save()
             if install:
                 try:
                     self.apply(p)
                 except Exception as e:
-                    msgs.append(f"Profile '{n}' imported but the connection could not be "
+                    msgs.append(f"Site '{p.display}' imported, but its connection couldn't be "
                                 f"created: {e}")
                     continue
-            msgs.append(f"Imported profile '{n}'.")
+            msgs.append(f"Imported site '{p.display}'.")
         if payload.get("profiles"):
-            msgs.append("NOTE: imported tunnels reuse the source PC's keys. Don't use the same "
-                        "profile on both PCs at once; for a second PC, export with "
-                        "--gateways-only and run 'catflap provision' there (one client per device).")
+            msgs.append("Note: imported sites use the other computer's keys. Don't connect the same "
+                        "site on both computers at once; for a second computer, export only the "
+                        "gateways and add the sites again there (one client per device).")
         self.store.settings().update({k: v for k, v in payload.get("settings", {}).items()
                                       if k not in self.store.settings()})
         self.store.save()

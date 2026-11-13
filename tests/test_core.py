@@ -224,3 +224,38 @@ def test_two_sites_sharing_only_the_vpn_server_address(manager, backend):
     assert any(f.code == "shared-host-route" for f in res.findings)
     assert "10.250.1.1/32" not in backend.installed["lake"].allowed_ips
     assert "192.168.20.0/24" in backend.installed["lake"].allowed_ips
+
+
+def test_import_merges_with_existing(manager, tmp_path):
+    from catflap.platform.base import TunnelStatus  # noqa: F401
+    manager.provision("home-gw", "home", ["LAN"], device="d", label="Home")
+    text = manager.export("correct horse")
+    # A second computer that already has its own (different) "home" and a gateway of the same name.
+    root = tmp_path / "pc2"
+    b2 = FakeBackend()
+    m2 = Manager(Store(root), SecretStore("file", root), b2, driver_factory=lambda gw, sec: FakeDriver(gw, sec))
+    m2.resolver = manager.resolver
+    m2.add_gateway("home-gw", "unifi", "https://10.9.9.9", api_key="OTHER")
+    m2.provision("home-gw", "home", ["IoT"], device="pc2", label="Home")
+    plan = m2.preview_bundle(text, "correct horse")
+    assert plan["conflict_sites"] == ["Home"] and plan["conflict_gateways"] == ["home-gw"]
+
+    msgs = m2.import_bundle(text, "correct horse", on_conflict="keep")
+    assert m2.store.profile("home").routes[0] == "192.168.20.0/24"        # mine kept
+    assert any("Kept this computer's site 'Home'" in x for x in msgs)
+
+    msgs = m2.import_bundle(text, "correct horse", on_conflict="both")
+    names = {p.display: p for p in m2.store.profiles().values()}
+    assert "Home" in names and "Home (imported)" in names
+    imported = names["Home (imported)"]
+    assert imported.routes[0] == "192.168.1.0/24" and imported.gateway == "home-gw-imported"
+    assert m2.secrets.get("gateway/home-gw-imported/api_key") == "KEY"
+    assert m2.secrets.get("gateway/home-gw/api_key") == "OTHER"
+    assert imported.ifname != m2.store.profile("home").ifname
+
+    # Importing the same file again: everything identical is recognised, nothing duplicated.
+    before = len(m2.store.profiles())
+    m2.import_bundle(text, "correct horse", on_conflict="both")
+    assert len(m2.store.profiles()) == before + 1   # only the still-conflicting "home" again
+    m2.import_bundle(text, "correct horse", on_conflict="replace")
+    assert m2.store.profile("home").routes[0] == "192.168.1.0/24"        # replaced

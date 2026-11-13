@@ -154,12 +154,26 @@ sudo apt install network-manager python3-keyring python3-cryptography python3-py
 pipx install --system-site-packages https://github.com/samschultzponsys/vpn-catflap/releases/download/v<version>/catflap-<version>-py3-none-any.whl
 ```
 
-**Windows (under development):** install [WireGuard for Windows](https://www.wireguard.com/install/)
-and Python 3.11+, then:
+### Windows (preview)
 
-```bash
-pip install "catflap[tray] @ https://github.com/samschultzponsys/vpn-catflap/releases/download/v<version>/catflap-<version>-py3-none-any.whl"
-```
+1. Install **WireGuard for Windows** from [wireguard.com/install](https://www.wireguard.com/install/)
+   (one time). CatFlap uses it for the actual VPN connection.
+2. Download `catflap-<version>-setup.exe` from the
+   [releases page](https://github.com/samschultzponsys/vpn-catflap/releases) and run it.
+   It installs for your user only, so no administrator rights are needed.
+3. Start **CatFlap** from the Start menu.
+
+**On Windows:**
+- Adding a site asks for administrator rights **once** (Windows' UAC prompt), to set the
+  site up in WireGuard and let your account start and stop it. Connecting and
+  disconnecting from the tray don't need any prompts after that.
+- Removing a site asks once more.
+- Updates: **Help → Check for updates…** downloads the new installer, runs it silently,
+  and CatFlap reopens as the new version.
+- The command line is `catflap-cli.exe` in the install folder. Windows file names
+  ignore case, so it can't also be called `catflap.exe` next to `CatFlap.exe`.
+
+The Windows version is new. Please report anything that doesn't work.
 
 **From source:**
 
@@ -447,7 +461,16 @@ catflap import-bundle ~/catflap-backup.json   # recreates gateways, credentials 
 ```
 
 The export contains gateways, API keys/passwords, profiles, private keys and
-settings. Connections are recreated on the new PC with all safety settings.
+settings. **Importing merges** with whatever is already on the computer:
+- **New** sites and gateways are added.
+- **Identical** ones are recognised and left alone.
+- **Same name, different settings:** you choose once for all of them:
+  - **Keep mine:** this computer's version stays.
+  - **Replace with imported:** the imported version replaces it.
+  - **Keep both:** the imported site is added as "<name> (imported)"; a gateway
+    becomes `<name>-imported`.
+
+  On the command line: `--on-conflict keep|replace|both`. Connections are recreated on the new PC with all safety settings.
 **Don't use the same profile on both PCs at the same time**, because they would
 fight over one key (problem #11). If you're adding a *second* PC rather than
 replacing one, copy only the gateways and provision fresh clients:

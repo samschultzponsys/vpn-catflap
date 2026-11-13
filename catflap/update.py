@@ -150,7 +150,7 @@ def instructions(info: InstallInfo, rel: ReleaseInfo) -> list[str]:
         return [f"{sys.executable} -m pip install --upgrade "
                 f"{_asset(rel, '.whl') or f'git+https://github.com/{REPO}@v{v}'}"]
     if m == "windows":
-        return [f"Download and run {_asset(rel, '.exe') or rel.url}"]
+        return [f"Download and run {_asset(rel, '-setup.exe') or _asset(rel, '.exe') or rel.url}"]
     return ["git fetch --tags", f"git checkout v{v}"]
 
 
@@ -202,6 +202,7 @@ class UpdateResult:
     message: str
     restart: bool = False            # restart catflap to run the new version
     downloaded: Path | None = None   # a file the user still has to install (Flatpak)
+    quit_app: bool = False           # close CatFlap now (the Windows installer reopens it)
     commands: list[str] = field(default_factory=list)   # what's left to run, if anything
 
     def __iter__(self):              # (done, message), for older callers
@@ -308,12 +309,14 @@ def apply_update(st: UpdateStatus, run: Callable[[list[str]], int] | None = None
                else [sys.executable, "-m", "pip", "install", "--upgrade", target])
         rc = run(cmd)
     elif m == "windows":
-        url = _asset(rel, ".exe")
+        url = _asset(rel, "-setup.exe") or _asset(rel, ".exe")
         if not url:
             return UpdateResult(False, "This release has no Windows installer; see " + rel.url)
         exe = _download(url, Path(tempfile.mkdtemp(prefix="catflap-update-")))
-        subprocess.Popen([str(exe)])  # the installer replaces us and restarts catflap
-        return UpdateResult(True, "The installer has been started; catflap will close.")
+        # Silent per-user install; the installer closes CatFlap and reopens the new version.
+        subprocess.Popen([str(exe), "/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CLOSEAPPLICATIONS"])
+        return UpdateResult(True, f"Installing CatFlap {rel.version}; it will reopen by itself.",
+                            quit_app=True)
     else:
         return UpdateResult(False, "Installed from source. Update with:", commands=manual)
     if rc == 0:

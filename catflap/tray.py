@@ -284,7 +284,29 @@ class MainWindow(QtWidgets.QMainWindow if QtWidgets else object):
             with open(path, encoding="utf-8") as f:
                 text = f.read()
             pw = self._ask_pass("Unlock the export", confirm=False) if is_encrypted(text) else None
-            msgs = run_blocking(self, "Importing…", lambda: self.app.m.import_bundle(text, pw))
+            plan = run_blocking(self, "Reading the export…", lambda: self.app.m.preview_bundle(text, pw))
+            choice = "keep"
+            clashes = plan["conflict_sites"] + plan["conflict_gateways"]
+            if clashes:
+                box = QtWidgets.QMessageBox(self)
+                box.setWindowTitle("Merge with what's here?")
+                box.setText("These already exist on this computer with different settings:\n\n  "
+                            + "\n  ".join(clashes))
+                box.setInformativeText(
+                    f"{len(plan['new_sites'])} new site(s) and {len(plan['new_gateways'])} new "
+                    "gateway(s) will be added either way; identical ones are left alone.")
+                keep = box.addButton("Keep mine", QtWidgets.QMessageBox.AcceptRole)
+                replace = box.addButton("Replace with imported", QtWidgets.QMessageBox.DestructiveRole)
+                both = box.addButton("Keep both", QtWidgets.QMessageBox.ActionRole)
+                box.addButton(QtWidgets.QMessageBox.Cancel)
+                box.setDefaultButton(keep)
+                self.app.run_dialog(box)
+                clicked = box.clickedButton()
+                if clicked not in (keep, replace, both):
+                    return
+                choice = "replace" if clicked is replace else "both" if clicked is both else "keep"
+            msgs = run_blocking(self, "Importing…",
+                                lambda: self.app.m.import_bundle(text, pw, on_conflict=choice))
             QtWidgets.QMessageBox.information(self, "CatFlap", "\n".join(msgs))
         except Exception as e:  # noqa: BLE001
             QtWidgets.QMessageBox.warning(self, "CatFlap", friendly_error(e))
@@ -631,6 +653,9 @@ class TrayApp(QtCore.QObject if QtCore else object):
         dlg = UpdateDialog(st, self.window, self.settings)
         self.run_dialog(dlg)
         self.m.store.save()
+        if dlg.restart_requested and getattr(dlg, "quit_only", False):
+            self.quit()
+            return
         if dlg.restart_requested:
             try:
                 update.restart(st.install)

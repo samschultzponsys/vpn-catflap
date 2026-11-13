@@ -1,18 +1,27 @@
 """Windows backend: the official WireGuard for Windows tunnel service.
 
-``wireguard.exe /installtunnelservice <file>`` installs and starts a service
-named ``WireGuardTunnel$<name>``; ``/uninstalltunnelservice <name>`` stops and
-removes it. Both need administrator rights, so catflap asks for elevation
-(UAC) only for those two calls and otherwise runs as the normal user.
+How a site works on Windows:
 
-Status: under development. The commands follow the WireGuard for Windows
-documentation, but this backend has not yet been tested on real Windows machines.
+* **Setup (once per site, one UAC prompt):** ``wireguard.exe
+  /installtunnelservice <file>`` creates the service ``WireGuardTunnel$<name>``.
+  In the same elevated step catflap sets the service to start on demand and
+  grants *this Windows user* permission to start and stop it.
+* **Connect / disconnect (no prompt):** ``sc start`` / ``sc stop`` on that
+  service, as the normal user.
+* **Changing routes etc.:** the tunnel service reads its .conf file each time it
+  starts, so catflap just rewrites the file (owned by the user, readable by
+  SYSTEM). No prompt.
+* **Removing a site:** ``/uninstalltunnelservice`` (one UAC prompt).
+
+Status: preview. Written against the WireGuard for Windows docs; needs testing on
+real Windows machines.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import tempfile
 from pathlib import Path
 
 from .. import wgconf
@@ -20,11 +29,43 @@ from ..model import PeerConfig, Profile
 from .base import Backend, BackendError, LocalAddress, LocalNetwork, LocalRoute, TunnelStatus
 
 DEFAULT_WIREGUARD = r"C:\Program Files\WireGuard\wireguard.exe"
+WIREGUARD_DOWNLOAD = "https://www.wireguard.com/install/"
 
 
 def _tunnel_dir() -> Path:
     base = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
     return Path(base) / "catflap" / "tunnels"
+
+
+def service_name(profile: Profile) -> str:
+    return f"WireGuardTunnel${profile.ifname}"
+
+
+# Elevated once per site: install the tunnel service, make it on-demand and let the
+# current user start/stop it (SDDL rights: CC query config, LC query status,
+# RP start, WP stop, RC read control).
+_INSTALL_PS = r"""
+param([string]$Wg, [string]$Conf, [string]$Name, [string]$Sid)
+$ErrorActionPreference = 'Stop'
+$svc = "WireGuardTunnel`$$Name"
+& $Wg /installtunnelservice $Conf
+for ($i = 0; $i -lt 40 -and -not (Get-Service -Name $svc -ErrorAction SilentlyContinue); $i++) { Start-Sleep -Milliseconds 250 }
+if (-not (Get-Service -Name $svc -ErrorAction SilentlyContinue)) { throw "the WireGuard tunnel service was not created" }
+& sc.exe stop $svc | Out-Null
+& sc.exe config $svc start= demand | Out-Null
+$sd = ((& sc.exe sdshow $svc) -join '').Trim()
+$ace = "(A;;CCLCRPWPRC;;;$Sid)"
+if ($sd -notlike "*$ace*") {
+  if ($sd -match 'S:') { $sd = $sd -replace 'S:', "${ace}S:" } else { $sd = $sd + $ace }
+  & sc.exe sdset $svc $sd | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw "could not allow this user to start the tunnel (sdset $LASTEXITCODE)" }
+}
+"""
+
+_UNINSTALL_PS = r"""
+param([string]$Wg, [string]$Name)
+& $Wg /uninstalltunnelservice $Name
+"""
 
 
 class WindowsBackend(Backend):
@@ -34,57 +75,107 @@ class WindowsBackend(Backend):
     def exe(self) -> str:
         return os.environ.get("CATFLAP_WIREGUARD_EXE", DEFAULT_WIREGUARD)
 
+    # ---------------------------------------------------------------- helpers
     def _ps(self, script: str):
         return self.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script])
 
-    def _elevated(self, args: list[str]) -> None:
-        quoted = ",".join("'" + a.replace("'", "''") + "'" for a in args)
-        script = (f"$p = Start-Process -FilePath '{self.exe}' -ArgumentList {quoted} "
-                  "-Verb RunAs -Wait -PassThru -WindowStyle Hidden; exit $p.ExitCode")
-        res = self._ps(script)
+    def _require_wireguard(self) -> None:
+        if not Path(self.exe).exists():
+            raise BackendError("WireGuard for Windows isn't installed. Install it from "
+                               f"{WIREGUARD_DOWNLOAD} (one time), then try again.")
+
+    def _elevated_script(self, script: str, args: dict[str, str], what: str) -> None:
+        """Run a PowerShell script as administrator (one UAC prompt)."""
+        d = Path(tempfile.mkdtemp(prefix="catflap-"))
+        ps1 = d / "step.ps1"
+        ps1.write_text(script, encoding="utf-8")
+        argv = ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(ps1)]
+        for k, v in args.items():
+            argv += [f"-{k}", v]
+        quoted = ",".join("'" + a.replace("'", "''") + "'" for a in argv)
+        launcher = (f"$p = Start-Process -FilePath 'powershell.exe' -ArgumentList {quoted} "
+                    "-Verb RunAs -Wait -PassThru -WindowStyle Hidden; exit $p.ExitCode")
+        try:
+            res = self._ps(launcher)
+        finally:
+            ps1.unlink(missing_ok=True)
+            try:
+                d.rmdir()
+            except OSError:
+                pass
         if res.returncode != 0:
-            raise BackendError(f"wireguard.exe {args[0]} failed (was the UAC prompt declined?): "
-                               f"{(res.stderr or res.stdout).strip()}")
+            raise BackendError(f"{what} didn't finish. Was the Windows permission prompt (UAC) "
+                               f"declined? {(res.stderr or res.stdout).strip()}")
+
+    def _user_sid(self) -> str:
+        res = self._ps("[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value")
+        sid = (res.stdout or "").strip()
+        if res.returncode != 0 or not sid.startswith("S-"):
+            raise BackendError("couldn't read this Windows user's ID")
+        return sid
+
+    def _service_state(self, profile: Profile) -> str | None:
+        res = self.run(["sc", "query", service_name(profile)])
+        if res.returncode != 0:
+            return None                      # not installed
+        for line in res.stdout.splitlines():
+            if "STATE" in line:
+                return line.split()[-1]      # RUNNING / STOPPED / START_PENDING …
+        return "UNKNOWN"
 
     def _conf_path(self, profile: Profile) -> Path:
         return _tunnel_dir() / f"{profile.ifname}.conf"
 
-    def install(self, profile: Profile, cfg: PeerConfig) -> str:
-        if not Path(self.exe).exists():
-            raise BackendError("WireGuard for Windows is not installed: get it from "
-                               "https://www.wireguard.com/install/")
+    def _write_conf(self, profile: Profile, cfg: PeerConfig) -> Path:
         path = self._conf_path(profile)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(wgconf.render(cfg), encoding="utf-8")
-        # Restrict the file to the current user + SYSTEM (the tunnel service).
+        # Only this user (who updates it) and SYSTEM (the tunnel service) can read it.
         self.run(["icacls", str(path), "/inheritance:r", "/grant:r",
-                  f"{os.environ.get('USERNAME', '')}:F", "SYSTEM:R"])
+                  f"{os.environ.get('USERNAME', '')}:F", "*S-1-5-18:R"])
+        return path
+
+    # ---------------------------------------------------------------- lifecycle
+    def install(self, profile: Profile, cfg: PeerConfig) -> str:
+        self._require_wireguard()
+        path = self._write_conf(profile, cfg)
+        if self._service_state(profile) is None:
+            self._elevated_script(_INSTALL_PS, {"Wg": self.exe, "Conf": str(path),
+                                                "Name": profile.ifname, "Sid": self._user_sid()},
+                                  f"Setting up {profile.display} in WireGuard")
         return profile.ifname
 
     def remove(self, profile: Profile) -> None:
-        self.down(profile)
+        if self._service_state(profile) is not None:
+            self._elevated_script(_UNINSTALL_PS, {"Wg": self.exe, "Name": profile.ifname},
+                                  f"Removing {profile.display} from WireGuard")
         self._conf_path(profile).unlink(missing_ok=True)
 
     def up(self, profile: Profile) -> None:
-        path = self._conf_path(profile)
-        if not path.exists():
-            raise BackendError(f"tunnel file missing; run 'catflap apply {profile.name}'")
-        self._elevated(["/installtunnelservice", str(path)])
+        if self._service_state(profile) is None:
+            raise BackendError(f"{profile.display} isn't set up in WireGuard yet; use "
+                               "Re-apply settings (Advanced view) to set it up")
+        res = self.run(["sc", "start", service_name(profile)])
+        if res.returncode != 0 and "1056" not in (res.stdout or ""):     # 1056: already running
+            raise BackendError(f"Windows couldn't start the tunnel: {(res.stdout or res.stderr).strip()}")
 
     def down(self, profile: Profile) -> None:
-        if self.status(profile).active:
-            self._elevated(["/uninstalltunnelservice", profile.ifname])
+        if self._service_state(profile) in ("RUNNING", "START_PENDING"):
+            self.run(["sc", "stop", service_name(profile)])
 
+    # ---------------------------------------------------------------- status
     def status(self, profile: Profile) -> TunnelStatus:
-        res = self.run(["sc", "query", f"WireGuardTunnel${profile.ifname}"])
-        active = res.returncode == 0 and "RUNNING" in res.stdout
+        active = self._service_state(profile) == "RUNNING"
         st = TunnelStatus(active=active)
         if active:
-            ps = self._ps(f"Get-NetAdapterStatistics -Name '{profile.ifname}' | "
-                          "Select-Object ReceivedBytes,SentBytes | ConvertTo-Json")
+            ps = self._ps(f"Get-NetAdapterStatistics -Name '{profile.ifname}' -ErrorAction "
+                          "SilentlyContinue | Select-Object ReceivedBytes,SentBytes | ConvertTo-Json")
             if ps.returncode == 0 and ps.stdout.strip():
-                d = json.loads(ps.stdout)
-                st.rx_bytes, st.tx_bytes = d.get("ReceivedBytes"), d.get("SentBytes")
+                try:
+                    d = json.loads(ps.stdout)
+                    st.rx_bytes, st.tx_bytes = d.get("ReceivedBytes"), d.get("SentBytes")
+                except ValueError:
+                    pass
         return st
 
     def local_network(self) -> LocalNetwork:

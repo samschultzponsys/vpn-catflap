@@ -427,7 +427,8 @@ def cmd_import_bundle(m: Manager, a, out: Out) -> int:
     with open(a.file, encoding="utf-8") as f:
         text = f.read()
     pw = _passphrase(confirm=False) if is_encrypted(text) else None
-    msgs = m.import_bundle(text, pw, overwrite=a.overwrite, install=not a.no_install)
+    msgs = m.import_bundle(text, pw, overwrite=a.overwrite, install=not a.no_install,
+                           on_conflict=a.on_conflict)
     for msg in msgs:
         out.say(msg)
     out.put("messages", msgs)
@@ -590,7 +591,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(fn=cmd_export)
     p = sub.add_parser("import-bundle", help="import a catflap export file")
     p.add_argument("file")
-    p.add_argument("--overwrite", action="store_true")
+    p.add_argument("--overwrite", action="store_true", help="same as --on-conflict replace")
+    p.add_argument("--on-conflict", choices=("keep", "replace", "both"), default="keep",
+                   help="same name, different settings: keep this computer's (default), "
+                        "replace with the imported one, or keep both")
     p.add_argument("--no-install", action="store_true")
     p.set_defaults(fn=cmd_import_bundle)
     p = sub.add_parser("suggest-subnet", help="suggest a per-site VPN subnet (10.250.N.0/28)")

@@ -25,6 +25,7 @@ class UpdateDialog(_Dialog):
         self.st = st
         self.settings = settings if settings is not None else {}
         self.restart_requested = False
+        self.quit_only = False          # Windows: the installer reopens CatFlap itself
         rel, info = st.latest, st.install
         self.setWindowTitle("Update CatFlap")
         self.resize(640, 520)
@@ -106,6 +107,13 @@ class UpdateDialog(_Dialog):
             return
         if res.commands:
             self.set_commands(res.commands)
+        if res.done and res.quit_app:
+            self.status.setText(f"<b>✓ {res.message}</b>")
+            self.settings["pending_update"] = self.st.latest.version
+            self.restart_requested = True
+            self.quit_only = True
+            QtCore.QTimer.singleShot(1500, self.accept)
+            return
         if res.done:
             self.go.setVisible(False)
             self.restart_btn.setVisible(res.restart)
