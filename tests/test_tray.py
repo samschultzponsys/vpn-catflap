@@ -402,5 +402,26 @@ def test_offer_to_remove_wireguard_app(qapp, manager, monkeypatch):
         return 0
     monkeypatch.setattr(app, "run_dialog", fake_exec)
     app.check_conflicting_apps(wg_finder=lambda: info)
-    assert seen["texts"] == ["Don't ask again", "Keep it", "Uninstall WireGuard"]
-    assert "built in" in seen["why"]
+    assert seen["texts"] == ["Don't ask again", "Hide its tray icon", "Keep it", "Uninstall WireGuard"]
+    assert "built in" in seen["why"] and "If you keep it" in seen["why"]
+
+
+def test_warns_about_other_vpns_once(qapp, manager, monkeypatch):
+    from catflap import conflicts
+    app = tray.TrayApp(qapp, manager)
+    app.timer.stop()
+    found = conflicts.match_interfaces(["eth0", "tailscale0", "cf-home", "nordlynx"])
+    seen = {}
+
+    def fake_exec(box):
+        buttons = {b.text(): b for b in box.buttons()}
+        seen["text"] = box.informativeText()
+        box.clickedButton = lambda: buttons["Don't warn about these again"]
+        return 0
+    monkeypatch.setattr(app, "run_dialog", fake_exec)
+    app.check_conflicting_apps(others=[(c, f"interface {d} is up") for c, d in found])
+    assert "Tailscale" in seen["text"] and "NordVPN" in seen["text"] and "kill switch" in seen["text"]
+    assert app.settings["conflicts_ignored"] == ["nordvpn", "tailscale"]
+    seen.clear()
+    app.check_conflicting_apps(others=[(c, "x") for c, d in found])
+    assert not seen                                      # not warned again

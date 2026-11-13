@@ -15,9 +15,13 @@ Versions are `MAJOR.MINOR`; the minor number runs 0–9 and then rolls over
   (about 3 MB) and lets you untick it; the Ready page lists exactly what will be
   downloaded. Opted out, CatFlap uses WireGuard for Windows if you install it, or offers
   to download the engine when you add a site.
-- Windows: if WireGuard for Windows (the app) is installed, CatFlap offers to uninstall
-  it (Keep it / Don't ask again). Sites set up with it switch to CatFlap's engine on the
+- Windows: if WireGuard for Windows (the app) is installed, CatFlap warns about running
+  both and offers to uninstall it, hide just its tray icon, or keep it. Sites set up with it switch to CatFlap's engine on the
   next connect; any site whose tunnel or program has gone is repaired on connect.
+- **Warnings about other VPN software** (Windows and Linux): at start CatFlap lists any
+  VPN apps that can interfere (Tailscale, ZeroTier, NordVPN, Proton VPN, Mullvad,
+  Cloudflare WARP, Cisco/GlobalProtect/FortiClient and more), what each can do, and how
+  to use it alongside CatFlap. "Don't warn about these again" silences them.
 - Windows: removing the last site removes the engine; uninstalling CatFlap removes its
   tunnels and engine (`catflap-cli remove-tunnels`).
 - Windows fixes: the permission-prompt step no longer gives up after 30 seconds, and

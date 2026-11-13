@@ -334,6 +334,13 @@ class WindowsBackend(Backend):
         """Delete tunnel services (one UAC prompt); drops the engine when none use it."""
         self._elevated_script(_UNINSTALL_PS, {"Names": ",".join(ifnames), "Dest": str(engine_dir())}, what)
 
+    def hide_wireguard_app_tray(self) -> None:
+        """Remove the WireGuard app's manager service (its tray icon and start at sign-in),
+        keeping the app installed. One UAC prompt."""
+        self._elevated_script('param([string]$Wg)\n& $Wg /uninstallmanagerservice\nexit 0\n',
+                              {"Wg": DEFAULT_WIREGUARD}, "Hiding WireGuard's tray icon")
+        self.run(["taskkill", "/IM", "wireguard.exe", "/FI", "SESSION ne 0", "/F"])
+
     def up(self, profile: Profile) -> None:
         if self._needs_setup(profile):
             conf = self._conf_path(profile)
@@ -392,12 +399,13 @@ UNINSTALL_KEYS = (
 )
 
 
-def find_installed(prefix: str, winreg_mod=None, exact: bool = False) -> dict | None:
-    """Find an installed program whose display name starts with ``prefix`` (e.g.
-    "WiFiman"). Returns {name, version, uninstall, quiet_uninstall, per_user} or None."""
+def installed_programs(winreg_mod=None) -> list[dict]:
+    """Every program in Windows' "Apps" list: {name, version, uninstall,
+    quiet_uninstall, per_user}."""
     if winreg_mod is None:
         import winreg as winreg_mod  # noqa: N813 - Windows only
     hives = {"HKLM": winreg_mod.HKEY_LOCAL_MACHINE, "HKCU": winreg_mod.HKEY_CURRENT_USER}
+    found = []
     for hive_name, path in UNINSTALL_KEYS:
         try:
             root = winreg_mod.OpenKey(hives[hive_name], path)
@@ -418,15 +426,24 @@ def find_installed(prefix: str, winreg_mod=None, exact: bool = False) -> dict | 
                                 return winreg_mod.QueryValueEx(k, n)[0]
                             except OSError:
                                 return ""
-                        name = val("DisplayName")
-                        n, want = (name or "").strip().lower(), prefix.lower()
-                        if n == want if exact else (n and n.startswith(want)):
-                            return {"name": name, "version": val("DisplayVersion"),
-                                    "uninstall": val("UninstallString"),
-                                    "quiet_uninstall": val("QuietUninstallString"),
-                                    "per_user": hive_name == "HKCU"}
+                        name = (val("DisplayName") or "").strip()
+                        if name:
+                            found.append({"name": name, "version": val("DisplayVersion"),
+                                          "uninstall": val("UninstallString"),
+                                          "quiet_uninstall": val("QuietUninstallString"),
+                                          "per_user": hive_name == "HKCU"})
                 except OSError:
                     continue
+    return found
+
+
+def find_installed(prefix: str, winreg_mod=None, exact: bool = False) -> dict | None:
+    """The first installed program whose name starts with (or is) ``prefix``."""
+    want = prefix.lower()
+    for info in installed_programs(winreg_mod):
+        n = info["name"].lower()
+        if n == want if exact else n.startswith(want):
+            return info
     return None
 
 

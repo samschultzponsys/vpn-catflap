@@ -668,34 +668,42 @@ class TrayApp(QtCore.QObject if QtCore else object):
                                               "again from your application menu.")
             self.quit()
 
-    def check_conflicting_apps(self, finder=None, wg_finder=None) -> None:
-        """Windows: offer to remove WiFiman Desktop (its Teleport VPN can clash with
-        CatFlap) and WireGuard for Windows (not needed: CatFlap has its own engine, so
-        it's just a second app and tray icon)."""
-        if sys.platform != "win32" and finder is None and wg_finder is None:
-            return
-        from .platform import windows
-        if finder is not None or wg_finder is None:
-            self._offer_uninstall(
-                finder or windows.find_wifiman, "wifiman_prompt", "WiFiman",
-                "Its Teleport VPN changes routes and DNS too, which can interfere with CatFlap's "
-                "connections. CatFlap replaces it, so you can uninstall it.")
-        if wg_finder is not None or finder is None:
-            b = self.m.backend
+    def check_conflicting_apps(self, finder=None, wg_finder=None, others=None) -> None:
+        """At start: offer to uninstall WiFiman Desktop and the WireGuard app (Windows),
+        then warn once about other VPN software that can clash with CatFlap."""
+        testing = finder is not None or wg_finder is not None or others is not None
+        if sys.platform == "win32" or testing:
+            from .platform import windows
+            if finder is not None or not testing:
+                self._offer_uninstall(
+                    finder or windows.find_wifiman, "wifiman_prompt", "WiFiman",
+                    "Its Teleport VPN changes routes and DNS too, which can interfere with "
+                    "CatFlap's connections. CatFlap replaces it, so you can uninstall it.\n\n"
+                    "If you keep it, don't connect Teleport and CatFlap at the same time.")
+            if wg_finder is not None or not testing:
+                b = self.m.backend
 
-            def own_engine_and_wg_app():
-                # Only when CatFlap's engine is (or can be) set up; otherwise the app IS the engine.
-                if not (getattr(b, "engine", None) and (b.engine.exists() or b.downloaded_msi())):
-                    return None
-                return windows.find_wireguard_app()
-            self._offer_uninstall(
-                wg_finder or own_engine_and_wg_app, "wireguard_app_prompt", "WireGuard",
-                "CatFlap has WireGuard's engine built in, so the WireGuard app (its window and "
-                "tray icon) isn't needed for CatFlap. Keep it if you use it for other tunnels.\n\n"
-                "Sites set up with it switch to CatFlap's engine the next time you connect "
-                "(Windows asks for permission once per site).")
+                def own_engine_and_wg_app():
+                    # Only when CatFlap's engine is (or can be) set up; otherwise the app IS the engine.
+                    if not (getattr(b, "engine", None) and (b.engine.exists() or b.downloaded_msi())):
+                        return None
+                    return windows.find_wireguard_app()
+                self._offer_uninstall(
+                    wg_finder or own_engine_and_wg_app, "wireguard_app_prompt", "WireGuard",
+                    "CatFlap has WireGuard's engine built in, so the WireGuard app (its window "
+                    "and tray icon) isn't needed for CatFlap.\n\n"
+                    "If you keep it:\n"
+                    "• Don't import CatFlap's sites into it, and don't run its tunnels for the "
+                    "same networks while CatFlap is connected: only one of them wins.\n"
+                    "• It shows its own tray icon. \"Hide its tray icon\" keeps the app but stops "
+                    "it starting with Windows (it comes back if you open WireGuard).\n\n"
+                    "Sites set up with the app switch to CatFlap's engine the next time you "
+                    "connect (Windows asks for permission once per site).",
+                    extra=("Hide its tray icon", self._hide_wireguard_tray))
+        if others is not None or not testing:
+            self._warn_other_vpns(others)
 
-    def _offer_uninstall(self, find, setting: str, short: str, why: str) -> None:
+    def _offer_uninstall(self, find, setting: str, short: str, why: str, extra=None) -> None:
         if self.settings.get(setting) == "never":
             return
         try:
@@ -705,16 +713,25 @@ class TrayApp(QtCore.QObject if QtCore else object):
         if not info:
             return
         box = QtWidgets.QMessageBox(self.window)
+        box.setIcon(QtWidgets.QMessageBox.Warning)
         box.setWindowTitle(f"{info['name']} is installed")
         box.setText(f"{info['name']} {info.get('version', '')} is installed on this computer.")
         box.setInformativeText(why)
         remove = box.addButton(f"Uninstall {short}", QtWidgets.QMessageBox.DestructiveRole)
+        extra_btn = box.addButton(extra[0], QtWidgets.QMessageBox.ActionRole) if extra else None
         box.addButton("Keep it", QtWidgets.QMessageBox.RejectRole)
         never = box.addButton("Don't ask again", QtWidgets.QMessageBox.ActionRole)
         self.run_dialog(box)
-        if box.clickedButton() is never:
+        clicked = box.clickedButton()
+        if clicked is never:
             self.set_setting(setting, "never")
-        elif box.clickedButton() is remove:
+        elif extra_btn is not None and clicked is extra_btn:
+            try:
+                run_blocking(self.window, f"{extra[0]}…", extra[1])
+                self.set_setting(setting, "never")
+            except Exception as e:  # noqa: BLE001
+                QtWidgets.QMessageBox.warning(self.window, "CatFlap", friendly_error(e))
+        elif clicked is remove:
             from .platform.windows import uninstall_program
             try:
                 run_blocking(self.window, f"Uninstalling {info['name']}…",
@@ -723,6 +740,29 @@ class TrayApp(QtCore.QObject if QtCore else object):
                                       QtWidgets.QSystemTrayIcon.Information, 4000)
             except Exception as e:  # noqa: BLE001
                 QtWidgets.QMessageBox.warning(self.window, "CatFlap", friendly_error(e))
+
+    def _hide_wireguard_tray(self) -> None:
+        self.m.backend.hide_wireguard_app_tray()
+
+    def _warn_other_vpns(self, found=None) -> None:
+        """One warning listing other VPN software that can clash, with what to do."""
+        from . import conflicts
+        if found is None:
+            found = conflicts.detect(self.m.backend, sys.platform)
+        ignored = set(self.settings.get("conflicts_ignored") or [])
+        found = [(c, d) for c, d in found if c.key not in ignored]
+        if not found:
+            return
+        box = QtWidgets.QMessageBox(self.window)
+        box.setIcon(QtWidgets.QMessageBox.Warning)
+        box.setWindowTitle("Other VPN software found")
+        box.setText("This computer has other VPN software that can interfere with CatFlap:")
+        box.setInformativeText("\n\n".join(f"• {c.name} ({d}): {c.why}" for c, d in found))
+        box.addButton("OK", QtWidgets.QMessageBox.AcceptRole)
+        never = box.addButton("Don't warn about these again", QtWidgets.QMessageBox.ActionRole)
+        self.run_dialog(box)
+        if box.clickedButton() is never:
+            self.set_setting("conflicts_ignored", sorted(ignored | {c.key for c, _ in found}))
 
     def show_after_restart(self) -> None:
         from .ui_update import after_restart_message

@@ -185,8 +185,11 @@ pipx install --system-site-packages https://github.com/samschultzponsys/vpn-catf
   any). Your sites, keys and settings stay, in case you reinstall.
 - If **WireGuard for Windows** (the app) is installed, CatFlap uses its own engine
   anyway and offers to uninstall the app, since CatFlap doesn't need it. Choose
-  **Keep it** if you use it for other tunnels. Sites that were set up with the app
-  switch to CatFlap's engine the next time you connect (one prompt per site).
+  **Hide its tray icon** to keep the app but stop it starting with Windows, or
+  **Keep it** if you use it for other tunnels. If you keep it, don't import CatFlap's
+  sites into it or run its tunnels for the same networks at the same time. Sites that
+  were set up with the app switch to CatFlap's engine the next time you connect (one
+  prompt per site).
 - If **WiFiman Desktop** (Ubiquiti's Teleport app) is installed, CatFlap offers to
   uninstall it when it starts, since both change routes and DNS. Choose **Keep it**
   or **Don't ask again** to leave it.
@@ -803,6 +806,25 @@ Run these tasks as the desktop user (`become: false`). Without a desktop session
 also set `CATFLAP_SECRETS=file`.
 
 ## Troubleshooting
+
+### Other VPN software
+
+When CatFlap starts, it checks for other VPN software that can interfere and shows one
+warning listing what it found and what to do (**Don't warn about these again** silences
+it for those apps). On Windows it looks at installed programs; on Linux at the network
+interfaces other VPNs create while they're running.
+
+| Software | What can go wrong | What to do |
+|---|---|---|
+| WiFiman Desktop (Teleport) | Changes routes and DNS too | CatFlap offers to uninstall it (Windows) |
+| WireGuard app (Windows) | Second app and tray icon; its tunnels can route the same networks | CatFlap offers to uninstall it or hide its tray icon |
+| Tailscale, ZeroTier, NetBird | Subnet routes / exit nodes can route the same networks as a site | Turn those routes off while connected if they clash |
+| NordVPN, ExpressVPN, Surfshark, Proton VPN, Mullvad, PIA, Windscribe, CyberGhost, IPVanish, Cloudflare WARP | Full tunnel takes all traffic and DNS; kill switch / "block LAN" can block CatFlap | Disconnect it, or turn on split tunneling / allow LAN |
+| Cisco Secure Client/AnyConnect, GlobalProtect, FortiClient, Zscaler, Ivanti/Pulse, Check Point | Work VPNs enforce their own routes and DNS and may block other VPNs | Use CatFlap while it's disconnected |
+| OpenVPN | A profile can route the same networks (or everything) | CatFlap warns about overlaps when you connect |
+
+Whatever is installed, CatFlap's pre-connect check still catches the actual clash (two
+tunnels or a local network routing the same addresses) and tells you which one.
 
 | Message | Meaning / fix |
 |---|---|
