@@ -8,6 +8,8 @@ Versions are `MAJOR.MINOR`; the minor number runs 0–9 and then rolls over
 - Windows: the installer downloads and runs the official WireGuard for Windows
   installer when it's missing, and CatFlap offers the same ("Install WireGuard?")
   if it's ever missing later. Everything else was already bundled.
+- Windows: if WiFiman Desktop (Teleport) is installed, CatFlap offers to uninstall it
+  at start (Uninstall / Keep it / Don't ask again), using WiFiman's own uninstaller.
 
 ## 1.3
 

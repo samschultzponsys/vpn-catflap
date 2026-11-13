@@ -218,3 +218,69 @@ class WindowsBackend(Backend):
                 ln.addresses.append(LocalAddress(cidr=f"{e['IPAddress']}/{e['PrefixLength']}",
                                                  dev=e.get("InterfaceAlias", "")))
         return ln
+
+
+# ---------------------------------------------------------------- other VPN apps
+UNINSTALL_KEYS = (
+    ("HKLM", r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
+    ("HKLM", r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"),
+    ("HKCU", r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
+)
+
+
+def find_installed(prefix: str, winreg_mod=None) -> dict | None:
+    """Find an installed program whose display name starts with ``prefix`` (e.g.
+    "WiFiman"). Returns {name, version, uninstall, quiet_uninstall, per_user} or None."""
+    if winreg_mod is None:
+        import winreg as winreg_mod  # noqa: N813 - Windows only
+    hives = {"HKLM": winreg_mod.HKEY_LOCAL_MACHINE, "HKCU": winreg_mod.HKEY_CURRENT_USER}
+    for hive_name, path in UNINSTALL_KEYS:
+        try:
+            root = winreg_mod.OpenKey(hives[hive_name], path)
+        except OSError:
+            continue
+        with root:
+            i = 0
+            while True:
+                try:
+                    sub = winreg_mod.EnumKey(root, i)
+                except OSError:
+                    break
+                i += 1
+                try:
+                    with winreg_mod.OpenKey(root, sub) as k:
+                        def val(n):
+                            try:
+                                return winreg_mod.QueryValueEx(k, n)[0]
+                            except OSError:
+                                return ""
+                        name = val("DisplayName")
+                        if name and name.lower().startswith(prefix.lower()):
+                            return {"name": name, "version": val("DisplayVersion"),
+                                    "uninstall": val("UninstallString"),
+                                    "quiet_uninstall": val("QuietUninstallString"),
+                                    "per_user": hive_name == "HKCU"}
+                except OSError:
+                    continue
+    return None
+
+
+def find_wifiman(winreg_mod=None) -> dict | None:
+    """Ubiquiti's WiFiman Desktop (Teleport VPN), which can clash with CatFlap."""
+    return find_installed("WiFiman", winreg_mod)
+
+
+def uninstall_program(info: dict, run) -> None:
+    """Run a program's own uninstaller and wait for it (UAC if installed for all users)."""
+    cmdline = info.get("uninstall") or info.get("quiet_uninstall")
+    if not cmdline:
+        raise BackendError(f"{info.get('name', 'The program')} has no uninstaller registered; "
+                           "remove it from Settings > Apps.")
+    verb = "" if info.get("per_user") else "-Verb RunAs "
+    escaped = cmdline.replace("'", "''")
+    script = (f"$p = Start-Process -FilePath 'cmd.exe' -ArgumentList '/c', '\"{escaped}\"' "
+              f"{verb}-Wait -PassThru; exit $p.ExitCode")
+    res = run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script])
+    if res.returncode != 0:
+        raise BackendError(f"{info.get('name')} wasn't uninstalled (was the prompt declined?). "
+                           "You can remove it from Settings > Apps.")

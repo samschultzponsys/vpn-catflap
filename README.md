@@ -171,6 +171,9 @@ pipx install --system-site-packages https://github.com/samschultzponsys/vpn-catf
   site up in WireGuard and let your account start and stop it. Connecting and
   disconnecting from the tray don't need any prompts after that.
 - Removing a site asks once more.
+- If **WiFiman Desktop** (Ubiquiti's Teleport app) is installed, CatFlap offers to
+  uninstall it when it starts, since both change routes and DNS. Choose **Keep it**
+  or **Don't ask again** to leave it.
 - Updates: **Help → Check for updates…** downloads the new installer, runs it silently,
   and CatFlap reopens as the new version.
 - The command line is `catflap-cli.exe` in the install folder. Windows file names

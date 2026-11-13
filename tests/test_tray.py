@@ -366,3 +366,23 @@ def test_offer_wireguard_install(qapp, monkeypatch, no_popups):
     assert offer_wireguard_install(None, WireGuardMissing("missing"), B())
     assert installed == [True]
     assert not offer_wireguard_install(None, RuntimeError("other"), B())     # other errors: no offer
+
+
+def test_offer_to_remove_wifiman(qapp, manager, monkeypatch):
+    app = tray.TrayApp(qapp, manager)
+    app.timer.stop()
+    info = {"name": "WiFiman Desktop", "version": "1.2.8", "uninstall": "u.exe", "per_user": True}
+    clicked = {}
+
+    def fake_exec(box):
+        buttons = {b.text(): b for b in box.buttons()}
+        clicked["texts"] = sorted(buttons)
+        box.clickedButton = lambda: buttons["Don't ask again"]
+        return 0
+    monkeypatch.setattr(app, "run_dialog", fake_exec)
+    app.check_conflicting_apps(finder=lambda: info)
+    assert clicked["texts"] == ["Don't ask again", "Keep it", "Uninstall WiFiman"]
+    assert app.settings["wifiman_prompt"] == "never"
+    clicked.clear()
+    app.check_conflicting_apps(finder=lambda: info)
+    assert not clicked                                   # not asked again

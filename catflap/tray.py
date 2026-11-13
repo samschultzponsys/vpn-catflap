@@ -668,6 +668,39 @@ class TrayApp(QtCore.QObject if QtCore else object):
                                               "again from your application menu.")
             self.quit()
 
+    def check_conflicting_apps(self, finder=None) -> None:
+        """Windows: offer to remove WiFiman Desktop, whose Teleport VPN can clash with CatFlap."""
+        if (sys.platform != "win32" and finder is None) or self.settings.get("wifiman_prompt") == "never":
+            return
+        try:
+            from .platform import windows
+            info = (finder or windows.find_wifiman)()
+        except Exception:  # noqa: BLE001 - best effort
+            return
+        if not info:
+            return
+        box = QtWidgets.QMessageBox(self.window)
+        box.setWindowTitle("WiFiman Desktop is installed")
+        box.setText(f"{info['name']} {info.get('version', '')} is installed on this computer.")
+        box.setInformativeText(
+            "Its Teleport VPN changes routes and DNS too, which can interfere with CatFlap's "
+            "connections. CatFlap replaces it, so you can uninstall it.")
+        remove = box.addButton("Uninstall WiFiman", QtWidgets.QMessageBox.DestructiveRole)
+        box.addButton("Keep it", QtWidgets.QMessageBox.RejectRole)
+        never = box.addButton("Don't ask again", QtWidgets.QMessageBox.ActionRole)
+        self.run_dialog(box)
+        if box.clickedButton() is never:
+            self.set_setting("wifiman_prompt", "never")
+        elif box.clickedButton() is remove:
+            from .platform.windows import uninstall_program
+            try:
+                run_blocking(self.window, "Uninstalling WiFiman Desktop…",
+                             lambda: uninstall_program(info, self.m.backend.run))
+                self.tray.showMessage("CatFlap", "WiFiman Desktop was uninstalled.",
+                                      QtWidgets.QSystemTrayIcon.Information, 4000)
+            except Exception as e:  # noqa: BLE001
+                QtWidgets.QMessageBox.warning(self.window, "CatFlap", friendly_error(e))
+
     def show_after_restart(self) -> None:
         from .ui_update import after_restart_message
         msg = after_restart_message(self.settings)
@@ -708,6 +741,7 @@ def main(argv: list[str] | None = None) -> int:
     wake.start(500)
     app.tray.show()
     QtCore.QTimer.singleShot(500, app.show_after_restart)
+    QtCore.QTimer.singleShot(2500, app.check_conflicting_apps)
     if not app.settings.get("first_run_done"):
         QtCore.QTimer.singleShot(0, app.first_run)
     elif "--minimized" not in argv:

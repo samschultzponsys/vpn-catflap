@@ -128,3 +128,52 @@ def test_missing_wireguard_raises_the_offerable_error(tmp_path, monkeypatch):
     monkeypatch.setenv("CATFLAP_WIREGUARD_EXE", str(tmp_path / "nope.exe"))
     with pytest.raises(windows.WireGuardMissing):
         windows.WindowsBackend(FakeWindows()).install(profile(), cfg())
+
+
+class FakeWinreg:
+    HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER = "HKLM", "HKCU"
+
+    def __init__(self, entries):
+        self.entries = entries          # {(hive, path): {subkey: {value: data}}}
+
+    class _K:
+        def __init__(self, data):
+            self.data = data
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def OpenKey(self, parent, path):  # noqa: N802
+        if isinstance(parent, self._K):
+            return self._K(parent.data[path])
+        if (parent, path) not in self.entries:
+            raise OSError("missing")
+        return self._K(self.entries[(parent, path)])
+
+    def EnumKey(self, key, i):  # noqa: N802
+        keys = list(key.data)
+        if i >= len(keys):
+            raise OSError("done")
+        return keys[i]
+
+    def QueryValueEx(self, key, name):  # noqa: N802
+        if name not in key.data:
+            raise OSError("no value")
+        return key.data[name], 1
+
+
+def test_find_wifiman_and_uninstall():
+    path = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
+    reg = FakeWinreg({("HKLM", path): {
+        "Zoom": {"DisplayName": "Zoom"},
+        "WiFiman Desktop": {"DisplayName": "WiFiman Desktop", "DisplayVersion": "1.2.8",
+                            "UninstallString": r'"C:\Program Files\WiFiman Desktop\Uninstall WiFiman Desktop.exe" /allusers'}}})
+    info = windows.find_wifiman(reg)
+    assert info["name"] == "WiFiman Desktop" and info["version"] == "1.2.8" and not info["per_user"]
+    assert windows.find_installed("Nothing", reg) is None
+    ran = []
+    windows.uninstall_program(info, lambda c: ran.append(c) or CmdResult(0, "", ""))
+    assert "-Verb RunAs" in ran[0][-1] and "Uninstall WiFiman Desktop.exe" in ran[0][-1]
