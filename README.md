@@ -184,15 +184,14 @@ pipx install --system-site-packages https://github.com/samschultzponsys/vpn-catf
   Uninstalling CatFlap removes its tunnels and engine (one prompt, only if there are
   any). Your sites, keys and settings stay, in case you reinstall.
 - If **WireGuard for Windows** (the app) is installed, CatFlap uses its own engine
-  anyway and offers to uninstall the app, since CatFlap doesn't need it. Choose
-  **Hide its tray icon** to keep the app but stop it starting with Windows, or
-  **Keep it** if you use it for other tunnels. If you keep it, don't import CatFlap's
+  anyway and lists the app under [other VPN software](#other-vpn-software), since
+  CatFlap doesn't need it. Tick **Uninstall**, or **Hide tray icon** to keep the app but
+  stop it starting with Windows, or leave both unticked if you use it for other tunnels. If you keep it, don't import CatFlap's
   sites into it or run its tunnels for the same networks at the same time. Sites that
   were set up with the app switch to CatFlap's engine the next time you connect (one
   prompt per site).
-- If **WiFiman Desktop** (Ubiquiti's Teleport app) is installed, CatFlap offers to
-  uninstall it when it starts, since both change routes and DNS. Choose **Keep it**
-  or **Don't ask again** to leave it.
+- **WiFiman Desktop** (Ubiquiti's Teleport app) is listed the same way, since both
+  change routes and DNS.
 - If a site's tunnel disappears (for example after uninstalling WireGuard for Windows),
   connecting sets it up again (one prompt).
 - Updates: **Help → Check for updates…** downloads the new installer, runs it silently,
@@ -809,10 +808,22 @@ also set `CATFLAP_SECRETS=file`.
 
 ### Other VPN software
 
-When CatFlap starts, it checks for other VPN software that can interfere and shows one
-warning listing what it found and what to do (**Don't warn about these again** silences
-it for those apps). On Windows it looks at installed programs; on Linux at the network
-interfaces other VPNs create while they're running.
+CatFlap looks for other VPN software that can interfere **the first time it starts and
+after every CatFlap update**, and whenever you choose **Settings → Check for other VPN
+software…**. It shows one list of what it found, with what each one can do and these
+checkboxes per item:
+
+- **Uninstall** (Windows): runs that program's own uninstaller when you click
+  **Uninstall N and close** (Windows may ask for permission).
+- **Hide tray icon (keep the app)**: WireGuard app only.
+- **Don't warn again**: the automatic check stays quiet about that program *at that
+  version*. If it's updated to a newer version, CatFlap mentions it again.
+
+**Settings → Check for other VPN software…** always lists everything it finds, including
+programs you chose not to be warned about (their box is ticked; untick it to be warned
+again). On Windows it looks at installed programs; on Linux at the network interfaces
+other VPNs create, so it only sees them while they're running. To remove one on Linux,
+use your software center or package manager.
 
 | Software | What can go wrong | What to do |
 |---|---|---|

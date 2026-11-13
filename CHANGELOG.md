@@ -3,6 +3,18 @@
 Versions are `MAJOR.MINOR`; the minor number runs 0–9 and then rolls over
 (1.9 → 2.0). Every release is tagged `vMAJOR.MINOR`.
 
+## 1.6
+
+- **Other VPN software, one list with checkboxes.** CatFlap scans the first time it starts
+  and after every update, and lists everything it finds (WiFiman, the WireGuard app,
+  Private Internet Access, Tailscale, NordVPN, work VPNs…) in one window. Each item has
+  **Uninstall** (Windows: runs its own uninstaller), **Don't warn again**, and for the
+  WireGuard app **Hide tray icon**.
+- "Don't warn again" now remembers the version: when that program is updated to a newer
+  version, CatFlap mentions it again. Choices from 1.5 are kept.
+- **Settings → Check for other VPN software…** scans on demand and always lists
+  everything found, including programs you silenced.
+
 ## 1.5
 
 - **Windows: no second WireGuard app.** CatFlap now uses only WireGuard's engine

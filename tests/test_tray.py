@@ -368,60 +368,86 @@ def test_offer_wireguard_install(qapp, monkeypatch, no_popups):
     assert not offer_wireguard_install(None, RuntimeError("other"), B())     # other errors: no offer
 
 
-def test_offer_to_remove_wifiman(qapp, manager, monkeypatch):
+def _pia(version="3.6"):
+    from catflap import conflicts
+    return conflicts.match_programs([{"name": "Private Internet Access", "version": version,
+                                      "uninstall": "pia-uninstall.exe", "per_user": False}])
+
+
+def _capture(app, monkeypatch, choose=None):
+    seen = []
+
+    def fake_exec(dlg):
+        seen.append([f.key for f, *_ in dlg.rows])
+        if choose:
+            choose(dlg)
+        return 1
+    monkeypatch.setattr(app, "run_dialog", fake_exec)
+    return seen
+
+
+def test_scans_after_each_update_and_respects_dont_warn_per_version(qapp, manager, monkeypatch):
     app = tray.TrayApp(qapp, manager)
     app.timer.stop()
-    info = {"name": "WiFiman Desktop", "version": "1.2.8", "uninstall": "u.exe", "per_user": True}
-    clicked = {}
-
-    def fake_exec(box):
-        buttons = {b.text(): b for b in box.buttons()}
-        clicked["texts"] = sorted(buttons)
-        box.clickedButton = lambda: buttons["Don't ask again"]
-        return 0
-    monkeypatch.setattr(app, "run_dialog", fake_exec)
-    app.check_conflicting_apps(finder=lambda: info)
-    assert clicked["texts"] == ["Don't ask again", "Keep it", "Uninstall WiFiman"]
-    assert app.settings["wifiman_prompt"] == "never"
-    clicked.clear()
-    app.check_conflicting_apps(finder=lambda: info)
-    assert not clicked                                   # not asked again
+    seen = _capture(app, monkeypatch, lambda d: d.set_choice("pia", quiet=True))
+    app.check_conflicting_apps(found=_pia())
+    assert seen == [["pia"]] and app.settings["conflicts_ignored"] == {"pia": "3.6"}
+    app.check_conflicting_apps()                          # same CatFlap version: no new scan
+    assert len(seen) == 1
+    app.settings["conflicts_scanned_version"] = "1.0"     # CatFlap was updated
+    monkeypatch.setattr("catflap.conflicts.detect", lambda b, p: _pia())
+    app.check_conflicting_apps()
+    assert len(seen) == 1                                 # silenced at this version
+    app.settings["conflicts_scanned_version"] = "1.0"
+    monkeypatch.setattr("catflap.conflicts.detect", lambda b, p: _pia("3.7"))
+    app.check_conflicting_apps()
+    assert seen[-1] == ["pia"]                            # newer PIA: warned again
 
 
-def test_offer_to_remove_wireguard_app(qapp, manager, monkeypatch):
+def test_manual_check_lists_everything_even_silenced(qapp, manager, monkeypatch):
     app = tray.TrayApp(qapp, manager)
     app.timer.stop()
-    info = {"name": "WireGuard", "version": "1.1.1", "uninstall": "MsiExec.exe /X{X}"}
-    seen = {}
-
-    def fake_exec(box):
-        buttons = {b.text(): b for b in box.buttons()}
-        seen["texts"] = sorted(buttons)
-        seen["why"] = box.informativeText()
-        box.clickedButton = lambda: buttons["Keep it"]
-        return 0
-    monkeypatch.setattr(app, "run_dialog", fake_exec)
-    app.check_conflicting_apps(wg_finder=lambda: info)
-    assert seen["texts"] == ["Don't ask again", "Hide its tray icon", "Keep it", "Uninstall WireGuard"]
-    assert "built in" in seen["why"] and "If you keep it" in seen["why"]
+    app.settings["conflicts_ignored"] = {"pia": "3.6"}
+    seen = _capture(app, monkeypatch)
+    monkeypatch.setattr(tray, "run_blocking", lambda parent, text, fn: fn())
+    monkeypatch.setattr("catflap.conflicts.detect", lambda b, p: _pia())
+    app.check_conflicting_apps(manual=True)
+    assert seen == [["pia"]]
+    assert app.settings["conflicts_ignored"] == {"pia": "3.6"}   # box was pre-ticked, kept
 
 
-def test_warns_about_other_vpns_once(qapp, manager, monkeypatch):
+def test_uninstall_checkbox_runs_the_uninstaller(qapp, manager, monkeypatch):
+    app = tray.TrayApp(qapp, manager)
+    app.timer.stop()
+    ran = []
+    monkeypatch.setattr(tray, "run_blocking", lambda parent, text, fn: fn())
+    monkeypatch.setattr("catflap.platform.windows.uninstall_program", lambda info, run: ran.append(info["name"]))
+    _capture(app, monkeypatch, lambda d: d.set_choice("pia", uninstall=True))
+    app.check_conflicting_apps(found=_pia())
+    assert ran == ["Private Internet Access"]
+
+
+def test_old_dont_ask_settings_are_kept(qapp, manager, monkeypatch):
     from catflap import conflicts
     app = tray.TrayApp(qapp, manager)
     app.timer.stop()
-    found = conflicts.match_interfaces(["eth0", "tailscale0", "cf-home", "nordlynx"])
-    seen = {}
+    app.settings["wifiman_prompt"] = "never"
+    app.settings["conflicts_ignored"] = ["pia"]
+    seen = _capture(app, monkeypatch)
+    wifiman = conflicts.match_programs([{"name": "WiFiman Desktop", "version": "1.2.8", "uninstall": "u"}])
+    app.check_conflicting_apps(found=wifiman + _pia())
+    assert not seen                                       # both silenced before versions were kept
+    assert app.settings["conflicts_ignored"] == {"pia": "3.6", "wifiman": "1.2.8"}
 
-    def fake_exec(box):
-        buttons = {b.text(): b for b in box.buttons()}
-        seen["text"] = box.informativeText()
-        box.clickedButton = lambda: buttons["Don't warn about these again"]
-        return 0
-    monkeypatch.setattr(app, "run_dialog", fake_exec)
-    app.check_conflicting_apps(others=[(c, f"interface {d} is up") for c, d in found])
-    assert "Tailscale" in seen["text"] and "NordVPN" in seen["text"] and "kill switch" in seen["text"]
-    assert app.settings["conflicts_ignored"] == ["nordvpn", "tailscale"]
-    seen.clear()
-    app.check_conflicting_apps(others=[(c, "x") for c, d in found])
-    assert not seen                                      # not warned again
+
+def test_wireguard_app_row_offers_hiding_the_tray_icon(qapp):
+    from catflap import conflicts
+    from catflap.ui_conflicts import ConflictsDialog
+    found = conflicts.match_programs([{"name": "WireGuard", "version": "1.1.1", "uninstall": "MsiExec /X{X}"}])
+    assert found[0].conflict is conflicts.WIREGUARD_APP
+    d = ConflictsDialog(found, {}, manual=True, windows=True)
+    d.set_choice("wireguard-app", hide=True)
+    assert [f.key for f in d.hide_tray()] == ["wireguard-app"] and not d.uninstall()
+    d.set_choice("wireguard-app", uninstall=True)        # uninstall unticks hide
+    assert not d.hide_tray() and [f.key for f in d.uninstall()] == ["wireguard-app"]
+    assert d.ok.text() == "Uninstall 1 and close"
