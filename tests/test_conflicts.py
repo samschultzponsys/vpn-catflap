@@ -12,7 +12,7 @@ def test_windows_programs():
     assert found[0].label == "Tailscale 1.80" and not found[0].can_uninstall
 
 
-def test_wireguard_app_only_when_catflap_has_its_own_engine(tmp_path):
+def test_wireguard_app_always_listed(tmp_path):
     progs = [{"name": "WireGuard", "version": "1.1.1", "uninstall": "u"}]
 
     class B:
@@ -20,9 +20,11 @@ def test_wireguard_app_only_when_catflap_has_its_own_engine(tmp_path):
 
         def downloaded_msi(self):
             return None
-    assert conflicts.detect(B(), "win32", programs=progs) == []     # the app IS the engine
+    f = conflicts.detect(B(), "win32", programs=progs)[0]           # still listed before the engine
+    assert f.key == "wireguard-app" and f.needs_engine and "still uses it" in f.detail
     B.engine.write_text("")
-    assert [f.key for f in conflicts.detect(B(), "win32", programs=progs)] == ["wireguard-app"]
+    f = conflicts.detect(B(), "win32", programs=progs)[0]
+    assert f.key == "wireguard-app" and not f.needs_engine
 
 
 def test_to_warn_respects_versions():

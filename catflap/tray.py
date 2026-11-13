@@ -707,6 +707,9 @@ class TrayApp(QtCore.QObject if QtCore else object):
         from .platform.windows import uninstall_program
         for f in dlg.uninstall():
             try:
+                if f.needs_engine:                 # keep sites working without the app
+                    run_blocking(self.window, "Downloading the WireGuard engine…",
+                                 self.m.backend.install_wireguard)
                 run_blocking(self.window, f"Uninstalling {f.label}…",
                              lambda f=f: uninstall_program(f.info, self.m.backend.run))
                 done.append(f"{f.name} was uninstalled")

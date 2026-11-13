@@ -3,6 +3,13 @@
 Versions are `MAJOR.MINOR`; the minor number runs 0–9 and then rolls over
 (1.9 → 2.0). Every release is tagged `vMAJOR.MINOR`.
 
+## 1.7
+
+- Windows: the WireGuard app is always listed under other VPN software, even before
+  CatFlap's own engine is set up (for example after updating from 1.4 inside the app,
+  which skips the installer's engine download). Ticking **Uninstall** then downloads
+  CatFlap's engine from wireguard.com first, so your sites keep working.
+
 ## 1.6
 
 - **Other VPN software, one list with checkboxes.** CatFlap scans the first time it starts

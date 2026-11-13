@@ -427,6 +427,21 @@ def test_uninstall_checkbox_runs_the_uninstaller(qapp, manager, monkeypatch):
     assert ran == ["Private Internet Access"]
 
 
+def test_uninstalling_wireguard_app_downloads_engine_first(qapp, manager, monkeypatch):
+    from catflap import conflicts
+    app = tray.TrayApp(qapp, manager)
+    app.timer.stop()
+    order = []
+    monkeypatch.setattr(tray, "run_blocking", lambda parent, text, fn: fn())
+    monkeypatch.setattr("catflap.platform.windows.uninstall_program", lambda info, run: order.append("uninstall"))
+    app.m.backend.install_wireguard = lambda: order.append("download")
+    found = conflicts.match_programs([{"name": "WireGuard", "version": "1.1.1", "uninstall": "u"}])
+    found[0].needs_engine = True
+    _capture(app, monkeypatch, lambda d: d.set_choice("wireguard-app", uninstall=True))
+    app.check_conflicting_apps(found=found)
+    assert order == ["download", "uninstall"]
+
+
 def test_old_dont_ask_settings_are_kept(qapp, manager, monkeypatch):
     from catflap import conflicts
     app = tray.TrayApp(qapp, manager)

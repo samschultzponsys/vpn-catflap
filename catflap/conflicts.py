@@ -43,6 +43,7 @@ class Found:
     version: str = ""
     detail: str = ""              # e.g. "interface tailscale0 is up"
     info: dict | None = None      # Windows uninstall info (None: can't uninstall from here)
+    needs_engine: bool = False    # WireGuard app: download CatFlap's engine before removing it
 
     @property
     def key(self) -> str:
@@ -123,18 +124,22 @@ def match_interfaces(devs: list[str], known=KNOWN) -> list[Found]:
 def detect(backend, platform: str, programs=None) -> list[Found]:
     """Other VPN software on this computer."""
     if platform == "win32":
-        known = KNOWN
-        engine = getattr(backend, "engine", None)
-        if not (engine is not None and (engine.exists() or backend.downloaded_msi())):
-            # CatFlap uses the WireGuard app itself when its own engine isn't set up
-            known = tuple(c for c in KNOWN if c is not WIREGUARD_APP)
         try:
             if programs is None:
                 from .platform.windows import installed_programs
                 programs = installed_programs()
         except Exception:  # noqa: BLE001 - best effort
             return []
-        return match_programs(programs, known)
+        found = match_programs(programs)
+        engine = getattr(backend, "engine", None)
+        if not (engine is not None and (engine.exists() or backend.downloaded_msi())):
+            for f in found:
+                if f.conflict is WIREGUARD_APP:
+                    # Sites still run on the app until CatFlap's own engine is set up.
+                    f.detail = ("CatFlap still uses it for now; uninstalling it first downloads "
+                                "CatFlap's own WireGuard engine from wireguard.com")
+                    f.needs_engine = True
+        return found
     try:
         devs = sorted({a.dev for a in backend.local_network().addresses if a.dev})
     except Exception:  # noqa: BLE001 - best effort
